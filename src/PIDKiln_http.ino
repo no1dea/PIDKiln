@@ -752,8 +752,9 @@ void SETUP_WebServer(void) {
   });
 
 
-  // Local JS mode serves uncompressed files from LittleFS (place jquery/chart libs under data/js/).
-  // Do not advertise Content-Encoding: gzip — the repo ships plain JS, not precompressed blobs.
+  // Local JS mode: large libs ship as precompressed *.gz only under data/js/.
+  // send(LittleFS, logicalPath) falls back to path.gz and sets Content-Encoding: gzip.
+  // Regenerate with scripts/compress_webassets.ps1 after bumping jquery/chart assets.
   if(Prefs[PRF_HTTP_JS_LOCAL].value.uint8){
     server.on("/js/jquery-3.7.1.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
       if(!_webAuth(request)) return;
@@ -831,10 +832,10 @@ void SETUP_WebServer(void) {
                   size_t len, bool final) {handleDoUpdate(request, filename, index, data, len, final);}
   );
   
-  // Serve some static data
-  server.serveStatic("/icons/", LittleFS, "/icons/");
-  server.serveStatic("/js/", LittleFS, "/js/");
-  server.serveStatic("/css/", LittleFS, "/css/");
+  // Serve some static data (serveStatic prefers *.gz when present)
+  server.serveStatic("/icons/", LittleFS, "/icons/").setCacheControl("max-age=86400");
+  server.serveStatic("/js/", LittleFS, "/js/").setCacheControl("max-age=86400");
+  server.serveStatic("/css/", LittleFS, "/css/").setCacheControl("max-age=86400");
   server.serveStatic(PREFS_FILE, LittleFS, PREFS_FILE).setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
   server.serveStatic("/favicon.ico", LittleFS, "/icons/heat.png");
 

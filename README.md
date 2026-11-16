@@ -179,6 +179,8 @@ This is the short version — for hardware assembly see the [Wiki](https://githu
 7. For boards without PSRAM use `-e esp32-wroom` instead.
 8. For production, set `-DDEBUG=0` in `platformio.ini` `build_flags` (or remove `-DDEBUG=1`).
 
+**Local JS/CSS:** static assets under `data/js` and `data/css` are precompressed (`.gz`) for ESPAsyncWebServer. Large Chart/jQuery libs ship as `.gz` only. After bumping those libs, place the new uncompressed files in `data/js/` and run `scripts/compress_webassets.ps1`.
+
 **Migrating from SPIFFS (v1.5 and older):** there is no in-place conversion. Backup programs and `pidkiln.conf`, flash the new firmware + LittleFS image, then restore files via the web UI or by editing `data/` before `uploadfs`.
 
 **Web OTA:** upload a firmware `.bin`, or a filesystem image whose name contains `littlefs` or legacy `spiffs`. The partition update command remains Arduino’s `U_SPIFFS` (filesystem partition), even when the image content is LittleFS.
