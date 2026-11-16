@@ -1,0 +1,6 @@
+[wokwi]
+version = 1
+# Full flash image (bootloader + partitions + app + LittleFS). Not firmware.bin.
+firmware = '.pio/build/esp32-wrover/firmware.merged.bin'
+elf = '.pio/build/esp32-wrover/firmware.elf'
+# Optional: gdbServerPort = 3333

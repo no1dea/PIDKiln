@@ -32,6 +32,7 @@
 #include <esp_task_wdt.h>
 
 #include "PIDKiln.h"
+#include <PIDKilnLogic.h>
 
 /* 
 ** Static, editable parameters. Some of them, can be replaces with PIDKiln preferences.
@@ -84,10 +85,7 @@ void Ensure_FS_Dirs(){
 // Currently excluded are non printable characters, except new line and [] brackets. [] are excluded mostly for testing purpose.
 // This way it should be faster then traversing char array
 boolean check_valid_chars(byte a){
-  if(a==0 || a==9 || a==95) return true; // end of file, tab, _
-  if(a==10 || a==13) return true; // new line - Line Feed, Carriage Return
-  if(a>=32 && a<=90) return true; // All basic characters, capital letters and numbers
-  if(a>=97 && a<=122) return true; // small letters
+  if(PIDKiln_check_valid_chars(a)) return true;
   DBG Serial.print("[MAIN]  Faulty character ->");
   DBG Serial.print(a,DEC);
   DBG Serial.print(" ");
@@ -100,12 +98,7 @@ boolean check_valid_chars(byte a){
 // Check filename if it has only letters, numbers and . _ characters - other are not allowed for easy parsing and transfering
 //
 boolean valid_filename(char *file){
-char c;
-  while (c = *file++){
-    if(strchr(allowed_chars_in_filename,c)) continue; // if every letter is on allowed list - we are good to go
-    else return false;
-  }
-  return true;
+  return PIDKiln_valid_filename(file) ? true : false;
 }
 
 

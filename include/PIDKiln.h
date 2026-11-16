@@ -172,7 +172,9 @@ typedef enum {
 #define MAX_FILENAME 30   // soft limit for path+name (kept for UI/upload safety)
 #define MAX_PROGNAME 20   //  - cos we already have /programs/ directory...
 
-const char allowed_chars_in_filename[]="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890._";
+/* Canonical charset lives in PIDKilnLogic; keep symbol for existing call sites. */
+#include <PIDKilnLogic.h>
+#define allowed_chars_in_filename PIDKILN_ALLOWED_FILENAME_CHARS
 
 struct DIRECTORY {
   char filename[MAX_PROGNAME+1];

@@ -4,6 +4,7 @@
 */
 #include <PID_v1.h>
 #include <SPI.h>
+#include <PIDKilnLogic.h>
 
 // Other variables
 //
@@ -32,33 +33,14 @@ void IRAM_ATTR onTimer(){
 // Load program from disk to memory - validate it
 //
 byte add_program_line(String& linia){
-uint16_t prg[3];
-uint8_t a=0,pos=2;
-int multi=1;
-
   // Looking for line dddd:dddd:dddd (temperature:time in minutes:time in minutes) - assume max 1350:9999:9999
-  char p_line[15];
-  strcpy(p_line,linia.c_str());
-  DBG dbgLog(LOG_DEBUG,"[PRG] Sanitizing line: '%s'\n",p_line);
-  a=linia.length(); // going back to front
-  prg[2]=0;prg[1]=prg[0]=0;
-  while(a--){
-    if(p_line[a]=='\0') continue;
-    //DBG Serial.printf(" %d(%d)\n",(byte)p_line[a],a);
-    if(p_line[a]<48 || p_line[a]>58) return 3;  // if this are not numbers or : - exit  
-    if(p_line[a]==58){ // separator :
-      multi=1;
-      pos--;
-    }else{
-      //DBG Serial.printf("pos: %d, multi: %d, prg[%d] is %d, current value:%d\n",pos,multi,pos,prg[pos],p_line[a]-48);
-      prg[pos]+=multi*(p_line[a]-48);
-      multi*=10;
-    }
-  }
-  if(prg[0]>Prefs[PRF_MAX_TEMP].value.uint16) return 4;   // check if we do not exceed max temperature
-  Program[Program_size].temp=prg[0];
-  Program[Program_size].togo=prg[1];
-  Program[Program_size].dwell=prg[2];
+  PIDKiln_ProgramStep step;
+  DBG dbgLog(LOG_DEBUG,"[PRG] Sanitizing line: '%s'\n",linia.c_str());
+  int err = PIDKiln_parse_program_line(linia.c_str(), Prefs[PRF_MAX_TEMP].value.uint16, &step);
+  if(err) return (byte)err;
+  Program[Program_size].temp=step.temp;
+  Program[Program_size].togo=step.togo;
+  Program[Program_size].dwell=step.dwell;
   DBG dbgLog(LOG_DEBUG,"[PRG] Program_pos: %d, Temp: %dC Time to: %ds Dwell: %ds\n",Program_size,Program[Program_size].temp,Program[Program_size].togo,Program[Program_size].dwell);
   Program_size++;
   return 0;

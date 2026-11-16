@@ -185,6 +185,34 @@ This is the short version — for hardware assembly see the [Wiki](https://githu
 
 **Arduino-ESP32 4.x:** not validated in this release. Expect a platform URL pin bump in `platformio.ini` plus retest of AsyncTCP, WDT, and OTA.
 
+### Tests without hardware
+
+**Wokwi (recommended for boot / WiFi-AP / web UI / Serial):**
+
+```
+# PowerShell helper (buildfs must run before firmware merge)
+./scripts/build_wokwi.ps1
+```
+
+Or manually (order matters — LittleFS must exist before the merge post-step):
+
+```
+pio run -e esp32-wrover -t buildfs
+pio run -e esp32-wrover
+```
+
+That produces a **4 MiB** `.pio/build/esp32-wrover/firmware.merged.bin` (bootloader + partitions + app + LittleFS) via [`merge_firmware.py`](merge_firmware.py). [`wokwi.toml`](wokwi.toml) points at that file (not plain `firmware.bin` — Wokwi’s default table has no FS partition, so `LittleFS.begin()` fails).
+
+Then start **Wokwi: Start Simulator** in the VS Code/Cursor extension (needs [`diagram.json`](diagram.json)), or upload the merged image on [wokwi.com](https://wokwi.com).
+
+Useful in Wokwi: boot, WiFi/AP (limited), web UI, FreeRTOS tasks, Serial logs, basic GPIO. Thermocouple / LCD / SSR hardware is not fully simulated.
+
+If a host C/C++ compiler is on `PATH` (e.g. MinGW on Windows):
+
+```
+pio test -e native
+```
+
 ### Legacy Arduino IDE notes
 
 Arduino IDE is no longer the supported install path. Historical core matrix: PIDKiln &lt;v1.2 → ESP32 &lt;2.0.x; v1.2+ → 2.0.x; v1.5+ → 3.x; v1.6+ → 3.3.x via PlatformIO/pioarduino. Libraries are now locked in `platformio.ini` (ESP32Async forks, not me-no-dev). Template delimiter `~` is set by `-DTEMPLATE_PLACEHOLDER=126` (ASCII for `~`) — no manual library patch.
