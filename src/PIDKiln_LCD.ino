@@ -619,7 +619,7 @@ char msg[125],rest[125];  // this should be 5 lines with 125 chars..  it should 
   
   sprintf(file_path,"%s/%s",PRG_Directory,Programs_DIR[sel].filename);
   DBG dbgLog(LOG_DEBUG,"[LCD]\tprogram path: %s\n",file_path);
-  if(SPIFFS.exists(file_path)){
+  if(LittleFS.exists(file_path)){
     u8g2.clearBuffer();
     
     u8g2.setDrawColor(1);

@@ -50,7 +50,7 @@ void Save_prefs(){
 File prf;
 
   DBG dbgLog(LOG_INFO,"[PREFS] Writing prefs to file");
-  if(prf=SPIFFS.open(PREFS_FILE,"w")){
+  if(prf=LittleFS.open(PREFS_FILE,"w")){
     for(uint16_t a=1; a<PRF_end; a++){
       if(Prefs[a].type==STRING){
         prf.printf("%s = %s\n",PrefsName[a],Prefs[a].value.str);
@@ -80,7 +80,7 @@ String line,item,value;
 int pos=0;
 
   DBG dbgLog(LOG_INFO,"[PREFS] Loading prefs from file");
-  if(prf=SPIFFS.open(PREFS_FILE,"r"))
+  if(prf=LittleFS.open(PREFS_FILE,"r"))
     while(prf.available()){
       line=prf.readStringUntil('\n');
       line.trim();

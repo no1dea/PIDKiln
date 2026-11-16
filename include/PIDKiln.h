@@ -169,7 +169,7 @@ typedef enum {
 ** Filesystem definintions
 **
 */
-#define MAX_FILENAME 30   // directory+name can be max 32 on SPIFFS
+#define MAX_FILENAME 30   // soft limit for path+name (kept for UI/upload safety)
 #define MAX_PROGNAME 20   //  - cos we already have /programs/ directory...
 
 const char allowed_chars_in_filename[]="abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890._";
@@ -194,7 +194,7 @@ uint16_t Logs_DIR_size=0;
 
  
 /* 
-** Spiffs settings
+** LittleFS settings (SPIFFS removed for Arduino-ESP32 3.x / 4.x path)
 **
 */
 #define PRG_DIRECTORY "/programs"
@@ -203,7 +203,7 @@ const char *PRG_Directory = PRG_DIRECTORY;  // I started to use it so often... s
 
 const char *LOG_Directory = "/logs";
 
-#define FORMAT_SPIFFS_IF_FAILED true
+#define FORMAT_LITTLEFS_IF_FAILED true
 
 /*
 **  Preference definitions
@@ -305,9 +305,22 @@ File CSVFile,LOGFile;
 ** Other stuff
 **
 */
-const char *PVer = "PIDKiln v1.5";
-const char *PDate = "2024.12.18";
+const char *PVer = "PIDKiln v1.6";
+const char *PDate = "2026.11.16";
 
+// DEBUG / MALLOC / REALLOC come from platformio.ini build_flags; defaults for safety.
+#ifndef DEBUG
+#define DEBUG 1
+#endif
+#ifndef MALLOC
+#define MALLOC ps_malloc
+#endif
+#ifndef REALLOC
+#define REALLOC ps_realloc
+#endif
+#ifndef RELAX_WDT_FOR_ASYNCTCP
+#define RELAX_WDT_FOR_ASYNCTCP 1
+#endif
 // If defined debug - do debug, otherwise comment out all debug lines
 #define DBG if(DEBUG)
 

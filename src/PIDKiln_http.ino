@@ -177,14 +177,14 @@ String Debug_ESP32(const String& var){
    DBG dbgLog(LOG_DEBUG,"[HTTP] maxAllocHeap: %f\n",maxAllocHeap);
    return String(maxAllocHeap);
  }
- // SPIFFS parameters
+ // LittleFS parameters
  //
  else if (var=="TOTAL_KB"){
-   float fileTotalKB = (float)SPIFFS.totalBytes() / 1024.0;
+   float fileTotalKB = (float)LittleFS.totalBytes() / 1024.0;
    return String(fileTotalKB);
  }
  else if (var=="USED_KB"){
-   float fileUsedKB = (float)SPIFFS.usedBytes() / 1024.0;
+   float fileUsedKB = (float)LittleFS.usedBytes() / 1024.0;
    return String(fileUsedKB);
  }
  else return String();
@@ -205,13 +205,13 @@ template_str=String();
 
   // Open index for writting
   tmp=String(PRG_Directory)+String("/index.html");
-  if(!(index = SPIFFS.open(tmp.c_str(), "w"))){
+  if(!(index = LittleFS.open(tmp.c_str(), "w"))){
     DBG dbgLog(LOG_DEBUG,"[HTTP] Failed to open for writing index.html\n");
     return;
   }
 
   // Copy index head
-  if(tmpf=SPIFFS.open("/prog_beg.txt", "r")){
+  if(tmpf=LittleFS.open("/prog_beg.txt", "r")){
     DBG dbgLog(LOG_DEBUG,"[HTTP] Head of index - copying...\n");
     tmp=tmpf.readString();
     //DBG Serial.println(tmp);
@@ -225,7 +225,7 @@ template_str=String();
     template_str += "<tr><td><img src=\"/icons/heat.png\" alt=\"[ICO]\"></td>";
     template_str += "<td><a href=\""+tmp+"\" target=\"_blank\">"+String(Programs_DIR[a].filename)+"</a></td>";  
     template_str += "<td>"+String(Programs_DIR[a].filesize)+"</td>";
-    if(file=SPIFFS.open(tmp.c_str(),"r")){
+    if(file=LittleFS.open(tmp.c_str(),"r")){
       template_str += "<td>"+file.readStringUntil('\n')+"</td>";
       file.close();
     }else template_str += "<td> Error opening file to read description </td>";
@@ -237,7 +237,7 @@ template_str=String();
   DBG Serial.print(template_str);
   index.print(template_str);
   // Copy end of the index template
-  if(tmpf=SPIFFS.open("/prog_end.txt", "r")){
+  if(tmpf=LittleFS.open("/prog_end.txt", "r")){
     DBG dbgLog(LOG_DEBUG,"[HTTP] End of index - copying...\n");
     tmp=tmpf.readString();
     //DBG Serial.println(tmp);
@@ -261,13 +261,13 @@ template_str=String();
 
   // Open index for writting
   tmp=String(LOG_Directory)+String("/index.html");
-  if(!(index = SPIFFS.open(tmp.c_str(), "w"))){
+  if(!(index = LittleFS.open(tmp.c_str(), "w"))){
     DBG dbgLog(LOG_DEBUG,"[HTTP] Failed to open for writing log/index.html\n");
     return;
   }
 
   // Copy index head
-  if(tmpf=SPIFFS.open("/logs_beg.txt", "r")){
+  if(tmpf=LittleFS.open("/logs_beg.txt", "r")){
     DBG dbgLog(LOG_DEBUG,"[HTTP] Head of logs - copying...\n");
     tmp=tmpf.readString();
     //DBG Serial.println(tmp);
@@ -281,7 +281,7 @@ template_str=String();
     
     template_str += "<td><a href=\""+tmp+"\" target=\"_blank\">"+String(Logs_DIR[a].filename)+"</a></td>";  
     template_str += "<td>"+String(Logs_DIR[a].filesize)+"</td>";
-    if(tmp.lastIndexOf(".log")>0 && (file=SPIFFS.open(tmp.c_str(),"r"))){
+    if(tmp.lastIndexOf(".log")>0 && (file=LittleFS.open(tmp.c_str(),"r"))){
       template_str += "<td>"+file.readStringUntil('\n')+"</td>";
       file.close();
     }else template_str += "<td>  </td>";
@@ -292,7 +292,7 @@ template_str=String();
   }
 
   // Copy end of the index template
-  if(tmpf=SPIFFS.open("/logs_end.txt", "r")){
+  if(tmpf=LittleFS.open("/logs_end.txt", "r")){
     DBG dbgLog(LOG_DEBUG,"[HTTP] End of log index - copying...\n");
     tmp=tmpf.readString();
     //DBG Serial.println(tmp);
@@ -406,7 +406,7 @@ String tmp=String(PRG_Directory);
       }
     }
 
-    // Abort if filename is too long (otherwise esp will not write file to SPIFFS silently!)
+    // Abort if filename is too long (otherwise esp will not write file to LittleFS silently!)
     if(tmp.length()>MAX_FILENAME){
       DBG dbgLog(LOG_DEBUG,"[HTTP] Uploaded filename is too large! Aborting\n");
       request->send(406, "text/html", "<html><body><h1>Filename is too long!</h1> Current limit is "+String(MAX_FILENAME)+"letters for directory and filename, so program name can be only "+String(MAX_PROGNAME)+" <br><br><a href=/programs/>Return to programs view</a></body></html");
@@ -425,7 +425,7 @@ String tmp=String(PRG_Directory);
     }
     
     if (newFile) newFile.close();
-    newFile = SPIFFS.open( tmp.c_str(), "w");
+    newFile = LittleFS.open( tmp.c_str(), "w");
   }
   DBG dbgLog(LOG_DEBUG,"[HTTP] Next iteration of file upload...\n");
   for(size_t i=0; i<len; i++){
@@ -449,7 +449,7 @@ String tmp=String(PRG_Directory);
     
     if(err){  // program did not validate correctly
       request->send(200, "text/html", "<html><body><h1>Program stucture is incorrect!</h1> Error code "+String(err)+".<br><br><a href=/programs/>Return to programs</a></body></html");
-      delete_file(newFile=SPIFFS.open( tmp.c_str(), "r"));  // we need to open file again - to close it with already existing function
+      delete_file(newFile=LittleFS.open( tmp.c_str(), "r"));  // we need to open file again - to close it with already existing function
       DBG dbgLog(LOG_ERR,"[HTTP] Detailed program check failed!\n");
       abort=true; // this will never happend...
       request->redirect("/programs");
@@ -475,8 +475,8 @@ void POST_Handle_Delete(AsyncWebServerRequest *request){
       char path[32];
       sprintf(path,"%s/%.*s",PRG_Directory,MAX_PROGNAME,p->value().c_str());
       DBG dbgLog(LOG_DEBUG,"[HTTP] Removing program: %s with fpath:%s\n",p->value().c_str(),path);
-      if(SPIFFS.exists(path)){
-        SPIFFS.remove(path);
+      if(LittleFS.exists(path)){
+        LittleFS.remove(path);
         Generate_INDEX();
       }
     }
@@ -494,7 +494,7 @@ String tmps;
   DBG dbgLog(LOG_DEBUG,"[HTTP]  Request type: %d\n",request->method());
   DBG dbgLog(LOG_DEBUG,"[HTTP]  Request url: %s\n",request->url().c_str());
 
-  if(!request->hasParam("prog_name") || !(tmpf=SPIFFS.open("/delete.html", "r")) ){  // if no program to delete - skip
+  if(!request->hasParam("prog_name") || !(tmpf=LittleFS.open("/delete.html", "r")) ){  // if no program to delete - skip
     DBG dbgLog(LOG_ERR,"[HTTP]  Failed to find GET or open delete.html");
     request->redirect("/programs");
     return;
@@ -582,7 +582,7 @@ boolean save=false;
   if(save){
     Save_prefs();
   }
-  request->send(SPIFFS, "/preferences.html", String(), false, Preferences_parser);
+  request->send(LittleFS, "/preferences.html", String(), false, Preferences_parser);
 }
 
 
@@ -609,7 +609,7 @@ int params = request->params();
       }
     }
   }
-  request->send(SPIFFS, "/index.html");
+  request->send(LittleFS, "/index.html");
 }
 
 
@@ -688,8 +688,11 @@ size_t content_len;
   if (!index){
     DBG dbgLog(LOG_INFO,"[HTTP] Beginning firmware update\n");
     content_len = request->contentLength();
-    // if filename includes spiffs, update the spiffs partition
-    int cmd = (filename.indexOf("spiffs") > -1) ? U_SPIFFS : U_FLASH;
+    // FS image update: Arduino still uses U_SPIFFS for the filesystem partition.
+    // Accept both legacy "spiffs" and current "littlefs" in the uploaded filename.
+    String fnameLower = filename;
+    fnameLower.toLowerCase();
+    int cmd = (fnameLower.indexOf("spiffs") > -1 || fnameLower.indexOf("littlefs") > -1) ? U_SPIFFS : U_FLASH;
     if (!Update.begin(UPDATE_SIZE_UNKNOWN, cmd)) {
       Update.printError(Serial);
     }
@@ -737,33 +740,32 @@ void SETUP_WebServer(void) {
     request->redirect("/index.html");
   });
 
-  server.serveStatic("/index.html", SPIFFS, "/index.html").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
-  server.serveStatic("/index_local.html", SPIFFS, "/index_local.html").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
+  server.serveStatic("/index.html", LittleFS, "/index.html").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
+  server.serveStatic("/index_local.html", LittleFS, "/index_local.html").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
   
   server.on("/index.html", HTTP_POST, handleIndexPost);
   server.on("/index_local.html", HTTP_POST, handleIndexPost);
   
   server.on("/js/chart.js", HTTP_GET, [](AsyncWebServerRequest *request){
     if(!_webAuth(request)) return;
-    request->send(SPIFFS, "/js/chart.js", String(), false, Chart_parser);
+    request->send(LittleFS, "/js/chart.js", String(), false, Chart_parser);
   });
 
 
-  if(Prefs[PRF_HTTP_JS_LOCAL].value.str){
+  // Local JS mode serves uncompressed files from LittleFS (place jquery/chart libs under data/js/).
+  // Do not advertise Content-Encoding: gzip — the repo ships plain JS, not precompressed blobs.
+  if(Prefs[PRF_HTTP_JS_LOCAL].value.uint8){
     server.on("/js/jquery-3.4.1.js", HTTP_GET, [](AsyncWebServerRequest* request) {
-      AsyncWebServerResponse* response = request->beginResponse(SPIFFS, "/js/jquery-3.4.1.js", "text/javascript");
-      response->addHeader("Content-Encoding", "gzip");
-      request->send(response);
+      if(!_webAuth(request)) return;
+      request->send(LittleFS, "/js/jquery-3.4.1.js", "text/javascript");
     });
     server.on("/js/Chart.2.9.3.bundle.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
-      AsyncWebServerResponse* response = request->beginResponse(SPIFFS, "/js/Chart.2.9.3.bundle.min.js", "text/javascript");
-      response->addHeader("Content-Encoding", "gzip");
-      request->send(response);
+      if(!_webAuth(request)) return;
+      request->send(LittleFS, "/js/Chart.2.9.3.bundle.min.js", "text/javascript");
     });
     server.on("/js/chartjs-datasource.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
-      AsyncWebServerResponse* response = request->beginResponse(SPIFFS, "/js/chartjs-datasource.min.js", "text/javascript");
-      response->addHeader("Content-Encoding", "gzip");
-      request->send(response);
+      if(!_webAuth(request)) return;
+      request->send(LittleFS, "/js/chartjs-datasource.min.js", "text/javascript");
     });
   }else{
     server.on("/js/jquery-3.4.1.js", HTTP_GET, [](AsyncWebServerRequest* request) {
@@ -780,12 +782,12 @@ void SETUP_WebServer(void) {
 
   server.on("/PIDKiln_vars.json", HTTP_GET, [](AsyncWebServerRequest *request){
     if(!_webAuth(request)) return;
-    request->send(SPIFFS, "/PIDKiln_vars.json", "application/json", false, handleVars);
+    request->send(LittleFS, "/PIDKiln_vars.json", "application/json", false, handleVars);
   });
 
   // Set default file for programs to index.html - because webserver was programmed by some Windows @%$$# :/
-  server.serveStatic("/programs/", SPIFFS, "/programs/").setDefaultFile("index.html").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
-  server.serveStatic("/logs/", SPIFFS, "/logs/").setDefaultFile("index.html").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
+  server.serveStatic("/programs/", LittleFS, "/programs/").setDefaultFile("index.html").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
+  server.serveStatic("/logs/", LittleFS, "/logs/").setDefaultFile("index.html").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
 
   // Upload new programs
   server.on("/upload", HTTP_POST, [](AsyncWebServerRequest *request){
@@ -795,12 +797,12 @@ void SETUP_WebServer(void) {
 
   server.on("/debug_board.html", HTTP_GET, [](AsyncWebServerRequest *request){
     if(!_webAuth(request)) return;
-    request->send(SPIFFS, "/debug_board.html", String(), false, Debug_ESP32);
+    request->send(LittleFS, "/debug_board.html", String(), false, Debug_ESP32);
   });
 
   server.on("/preferences.html", HTTP_GET, [](AsyncWebServerRequest *request){
     if(!_webAuth(request)) return;
-    request->send(SPIFFS, "/preferences.html", String(), false, Preferences_parser);
+    request->send(LittleFS, "/preferences.html", String(), false, Preferences_parser);
   });
 
   server.on("/preferences.html", HTTP_POST, handlePrefs);
@@ -815,12 +817,12 @@ void SETUP_WebServer(void) {
 
   server.on("/about.html", HTTP_GET, [](AsyncWebServerRequest *request){
     if(!_webAuth(request)) return;
-    request->send(SPIFFS, "/about.html", String(), false, About_parser);
+    request->send(LittleFS, "/about.html", String(), false, About_parser);
   });
 
   server.on("/flash_firmware.html", HTTP_GET, [](AsyncWebServerRequest *request){
     if(!_webAuth(request)) return;
-    request->send(SPIFFS, "/flash_firmware.html", String(), false, Preferences_parser);
+    request->send(LittleFS, "/flash_firmware.html", String(), false, Preferences_parser);
   });
   
   server.on("/flash_firmware.html", HTTP_POST,
@@ -830,11 +832,11 @@ void SETUP_WebServer(void) {
   );
   
   // Serve some static data
-  server.serveStatic("/icons/", SPIFFS, "/icons/");
-  server.serveStatic("/js/", SPIFFS, "/js/");
-  server.serveStatic("/css/", SPIFFS, "/css/");
-  server.serveStatic(PREFS_FILE, SPIFFS, PREFS_FILE).setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
-  server.serveStatic("/favicon.ico", SPIFFS, "/icons/heat.png");
+  server.serveStatic("/icons/", LittleFS, "/icons/");
+  server.serveStatic("/js/", LittleFS, "/js/");
+  server.serveStatic("/css/", LittleFS, "/css/");
+  server.serveStatic(PREFS_FILE, LittleFS, PREFS_FILE).setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
+  server.serveStatic("/favicon.ico", LittleFS, "/icons/heat.png");
 
   server.onNotFound([](AsyncWebServerRequest *request){
     //request->send(404);

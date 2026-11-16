@@ -1,8 +1,12 @@
 /*
 ** PIDKiln OTA Install
 **
+** Downloads LittleFS image + firmware sketch over HTTP.
 ** based on: httpUpdateSPIFFS.ino
 ** Created on: 05.12.2015
+**
+** Note: httpUpdate.updateSpiffs() still targets the filesystem partition
+** (Arduino U_SPIFFS cmd) even when the image content is LittleFS.
 */
 
 
@@ -12,8 +16,8 @@ static char* WiFi_PASS="";
 
 
 
-#define BIN_SPIFFS "http://adrian.siemieniak.net/PIDKiln/PIDKiln.spiffs.bin"
-//#define BIN_SPIFFS "https://raw.githubusercontent.com/Saur0o0n/pidkiln/master/OTA_Install/PIDKiln.spiffs.bin"
+#define BIN_LITTLEFS "http://adrian.siemieniak.net/PIDKiln/PIDKiln.littlefs.bin"
+//#define BIN_LITTLEFS "https://raw.githubusercontent.com/Saur0o0n/pidkiln/master/OTA_Install/PIDKiln.littlefs.bin"
 #define BIN_SKETCH "http://adrian.siemieniak.net/PIDKiln/PIDKiln.ino.esp32.bin"
 //#define BIN_SKETCH "https://raw.githubusercontent.com/Saur0o0n/pidkiln/master/OTA_Install/PIDKiln.ino.esp32.bin"
 
@@ -58,7 +62,7 @@ void loop() {
   // wait for WiFi connection
   if ((WiFiMulti.run() == WL_CONNECTED)) {
 
-    Serial.println("Update SPIFFS...");
+    Serial.println("Update LittleFS...");
 
     WiFiClient client;
 
@@ -70,7 +74,8 @@ void loop() {
     // value is used to put the LED on. If the LED is on with HIGH, that value should be passed
     //httpUpdate.setLedPin(LED_BUILTIN, LOW);
 
-    t_httpUpdate_return ret = httpUpdate.updateSpiffs(client, BIN_SPIFFS);
+    // updateSpiffs = filesystem partition update (image may be LittleFS-formatted)
+    t_httpUpdate_return ret = httpUpdate.updateSpiffs(client, BIN_LITTLEFS);
     if (ret == HTTP_UPDATE_OK) {
       Serial.println("Update sketch...");
       ret = httpUpdate.update(client, BIN_SKETCH);

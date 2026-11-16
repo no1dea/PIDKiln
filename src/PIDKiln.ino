@@ -1,5 +1,5 @@
 /*
-** PIDKiln v1.5 - high temperature kiln PID controller for ESP32
+** PIDKiln v1.6 - high temperature kiln PID controller for ESP32
 **
 ** Copyright (C) 2019-2025 - Adrian Siemieniak
 **
@@ -26,10 +26,9 @@
 #include <WiFi.h>
 #include <WiFiClient.h>
 #include <WiFiUdp.h>
-#include <FS.h>   // Include the SPIFFS library
-#include <SPIFFS.h>
+#include <FS.h>
+#include <LittleFS.h>
 #include <ESPAsyncWebServer.h>
-#include <rtc_wdt.h>
 #include <esp_task_wdt.h>
 
 #include "PIDKiln.h"
@@ -37,36 +36,47 @@
 /* 
 ** Static, editable parameters. Some of them, can be replaces with PIDKiln preferences.
 ** Please set them up before uploading.
+**
+** TEMPLATE_PLACEHOLDER, DEBUG, MALLOC/REALLOC, RELAX_WDT_FOR_ASYNCTCP are set via platformio.ini build_flags.
 */
-#define TEMPLATE_PLACEHOLDER '~' // THIS DOESN'T WORK NOW FROM HERE - replace it in library! Arduino/libraries/ESPAsyncWebServer/src/WebResponseImpl.h
-
-// If you have Wrover with PSRAM
-#define MALLOC ps_malloc
-#define REALLOC ps_realloc
-
-// if you have Wroom without it
-//#define MALLOC malloc
-//#define REALLOC realloc
-
-#define DEBUG true
-//#define DEBUG false
 
 
-// Close cleanly file and delete file from SPIFFS
+// Close cleanly file and delete file from LittleFS (use full path — name() may be basename-only)
 //
 boolean delete_file(File &newFile){
-char filename[32];
+char filename[64];
  if(newFile){
-    strcpy(filename,newFile.name());
+    // Prefer full path when available (ESP32 Arduino 2.0+/3.x)
+    if(newFile.path() && strlen(newFile.path()) > 0){
+      strncpy(filename, newFile.path(), sizeof(filename) - 1);
+    }else{
+      strncpy(filename, newFile.name(), sizeof(filename) - 1);
+    }
+    filename[sizeof(filename) - 1] = '\0';
     DBG dbgLog(LOG_DEBUG,"[MAIN] Deleting uploaded file: \"%s\"\n",filename);
     newFile.flush();
     newFile.close();
-    if(SPIFFS.remove(filename)){
+    if(LittleFS.remove(filename)){
       DBG dbgLog(LOG_DEBUG,"[MAIN] Deleted!");
     }
     Generate_INDEX(); // Just in case user wanted to overwrite existing file
     return true;
  }else return false;
+}
+
+
+// Ensure required LittleFS directories exist (real directory FS, unlike SPIFFS flat layout)
+//
+void Ensure_FS_Dirs(){
+  if(!LittleFS.exists(PRG_Directory)){
+    LittleFS.mkdir(PRG_Directory);
+  }
+  if(!LittleFS.exists(LOG_Directory)){
+    LittleFS.mkdir(LOG_Directory);
+  }
+  if(!LittleFS.exists("/etc")){
+    LittleFS.mkdir("/etc");
+  }
 }
 
 
@@ -104,18 +114,17 @@ char c;
 void setup() {
   char msg[MAX_CHARS_PL];
 
-// This should disable watchdog killing asynctcp and others - one of this should work :)
-// This is not recommended, but if Webserver/AsyncTCP will hang (that has happen to me) - this will at least do not reset the device (and potentially ruin program).
-// ESP32 will continue to work properly even in AsynTCP will hang - there will be no HTTP connection. If you do not like this - comment out next 6 lines.
+#if RELAX_WDT_FOR_ASYNCTCP
+// Intentional hang mitigation: if AsyncTCP/web hangs, prefer not resetting a hot kiln.
+// Prefer public Arduino/IDF WDT APIs (portable toward 4.x). Revisit once ESP32Async is proven stable.
   esp_task_wdt_config_t config = {
     .timeout_ms = 60* 1000,  //  60 seconds
-    .trigger_panic = true,     // Trigger panic if watchdog timer is not reset
+    .trigger_panic = true,
   };
   esp_task_wdt_reconfigure(&config);
-  rtc_wdt_protect_off();
-  rtc_wdt_disable();
   disableCore0WDT();
   disableCore1WDT();
+#endif
 
   // Initialize prefs array with default values
   Setup_prefs();
@@ -123,11 +132,12 @@ void setup() {
   // Serial port for debugging purposes
   initSerial();
 
-  // Initialize SPIFFS
-  if (!SPIFFS.begin(FORMAT_SPIFFS_IF_FAILED)) {
-    DBG dbgLog(LOG_DEBUG,"[MAIN] An Error has occurred while mounting SPIFFS\n");
+  // Initialize LittleFS
+  if (!LittleFS.begin(FORMAT_LITTLEFS_IF_FAILED)) {
+    DBG dbgLog(LOG_DEBUG,"[MAIN] An Error has occurred while mounting LittleFS\n");
     return;
   }
+  Ensure_FS_Dirs();
 
   // Load all preferences from disk
   Load_prefs();

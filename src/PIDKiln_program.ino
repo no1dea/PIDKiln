@@ -86,7 +86,7 @@ File prg;
   }
   DBG dbgLog(LOG_INFO,"[PRG] Load program name: '%s'\n",file_path);
   
-  if(prg = SPIFFS.open(file_path,"r")){
+  if(prg = LittleFS.open(file_path,"r")){
     Program_desc="";  // erase current program
     Program_size=0;
     while(prg.available()){
@@ -129,7 +129,7 @@ uint8_t Load_programs_dir(){
 uint16_t count=0;
 File dir,file;
 
-  dir = SPIFFS.open(PRG_Directory);
+  dir = LittleFS.open(PRG_Directory);
   if(!dir) return 1;  // directory open failed
   DBG dbgLog(LOG_INFO,"[PRG] Loading directory...\n");
   while(dir.openNextFile()) count++;  // not the prettiest - but we count files first to do proper malloc without fragmenting memory
@@ -286,7 +286,7 @@ char file[32];
 
   sprintf(file,"%s/%s",PRG_Directory,Programs_DIR[Find_selected_program()].filename);
   DBG dbgLog(LOG_INFO,"[PRG] !!! Erasing file from disk: %s",file);
-  return SPIFFS.remove(file);
+  return LittleFS.remove(file);
 }
 
 

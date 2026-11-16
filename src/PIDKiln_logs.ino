@@ -17,7 +17,7 @@ struct tm timeinfo, *tmm;
   else sprintf(str,"/logs/%d.csv",millis());  // if we don't have a clock - use millis - this should NOT happend
   DBG dbgLog(LOG_INFO,"[LOG] Trying to create log file:%s\n",str);
   
-  if(CSVFile=SPIFFS.open(str, "w")){
+  if(CSVFile=LittleFS.open(str, "w")){
     DBG dbgLog(LOG_INFO,"[LOG] Created new log file %s\n",str);
 #ifdef ENERGY_MON_PIN
     CSVFile.print(String("Date,Temperature,Housing,Energy"));
@@ -31,7 +31,7 @@ struct tm timeinfo, *tmm;
   tmpstr=strstr(str,".csv");
   if(tmpstr){
     strncpy(tmpstr,".log",4);
-    if(LOGFile=SPIFFS.open(str, "w")){
+    if(LOGFile=LittleFS.open(str, "w")){
       LOGFile.printf("Program name: %s\n",Program_run_name);
       LOGFile.printf("Program desc: %s\n",Program_run_desc);
       if(tmm = localtime(&Program_run_start)){
@@ -112,7 +112,7 @@ char str[33];
 }
 
 
-// Function leans logs on SPIFFs depending on preferences value "LOG_Files_Limit"
+// Function leans logs on LittleFS depending on preferences value "LOG_Files_Limit"
 //
 void Clean_LOGS(){
 char fname[MAX_FILENAME];
@@ -122,7 +122,7 @@ char fname[MAX_FILENAME];
   for(uint16_t a=Prefs[PRF_LOG_LIMIT].value.uint16; a<Logs_DIR_size; a++){
     sprintf(fname,"%s/%s",LOG_Directory,Logs_DIR[a].filename);
     DBG dbgLog(LOG_INFO,"[LOG] Deleting file:%s\n",fname);
-    SPIFFS.remove(fname);
+    LittleFS.remove(fname);
   }
 }
 
@@ -133,7 +133,7 @@ uint8_t Load_LOGS_Dir(){
 uint16_t count=0;
 File dir,file;
 
-  dir = SPIFFS.open(LOG_Directory);
+  dir = LittleFS.open(LOG_Directory);
   if(!dir) return 1;  // directory open failed
   DBG dbgLog(LOG_INFO,"[LOG] Loading dir: Loading logs directory...\n");
   while(dir.openNextFile()) count++;  // not the prettiest - but we count files first to do proper malloc without fragmenting memory
