@@ -755,23 +755,23 @@ void SETUP_WebServer(void) {
   // Local JS mode serves uncompressed files from LittleFS (place jquery/chart libs under data/js/).
   // Do not advertise Content-Encoding: gzip — the repo ships plain JS, not precompressed blobs.
   if(Prefs[PRF_HTTP_JS_LOCAL].value.uint8){
-    server.on("/js/jquery-3.4.1.js", HTTP_GET, [](AsyncWebServerRequest* request) {
+    server.on("/js/jquery-3.7.1.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
       if(!_webAuth(request)) return;
-      request->send(LittleFS, "/js/jquery-3.4.1.js", "text/javascript");
+      request->send(LittleFS, "/js/jquery-3.7.1.min.js", "text/javascript");
     });
-    server.on("/js/Chart.2.9.3.bundle.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
+    server.on("/js/Chart.2.9.4.bundle.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
       if(!_webAuth(request)) return;
-      request->send(LittleFS, "/js/Chart.2.9.3.bundle.min.js", "text/javascript");
+      request->send(LittleFS, "/js/Chart.2.9.4.bundle.min.js", "text/javascript");
     });
     server.on("/js/chartjs-datasource.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
       if(!_webAuth(request)) return;
       request->send(LittleFS, "/js/chartjs-datasource.min.js", "text/javascript");
     });
   }else{
-    server.on("/js/jquery-3.4.1.js", HTTP_GET, [](AsyncWebServerRequest* request) {
+    server.on("/js/jquery-3.7.1.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
       request->redirect(JS_JQUERY);
     });
-    server.on("/js/Chart.2.9.3.bundle.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
+    server.on("/js/Chart.2.9.4.bundle.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
       request->redirect(JS_CHART);
     });
     server.on("/js/chartjs-datasource.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {

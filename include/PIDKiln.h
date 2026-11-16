@@ -331,9 +331,9 @@ WiFiUDP udpClient;
 Syslog syslog(udpClient, SYSLOG_PROTO_IETF);
 
 
-#define JS_JQUERY "https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"
-#define JS_CHART "https://cdn.jsdelivr.net/npm/chart.js@2.9.3/dist/Chart.bundle.min.js"
-#define JS_CHART_DS "https://cdn.jsdelivr.net/npm/chartjs-plugin-datasource"
+#define JS_JQUERY "https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"
+#define JS_CHART "https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.bundle.min.js"
+#define JS_CHART_DS "https://cdn.jsdelivr.net/npm/chartjs-plugin-datasource@0.1.0/dist/chartjs-plugin-datasource.min.js"
 
 
 /*
