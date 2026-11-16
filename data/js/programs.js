@@ -5,7 +5,7 @@ function ValidateSize(file) {
         var FileSize = file.files[0].size / 1024; // in KiB
 	var Name = file.files[0].name;
 	if (Name.length > 20){
-		alert("Program name cannot be longer then 20 characters. Sorry - limitation of SPIFFS");
+		alert("Program name cannot be longer then 20 characters. Sorry - soft filename limit");
 		file.value = "";
 	}
         if (FileSize > 10) {

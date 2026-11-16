@@ -1,3 +1,11 @@
+1.6 (2026.11.16)
+- PlatformIO / pioarduino primary build (Arduino-ESP32 3.3.12 pinned)
+- pinned ESP32Async AsyncTCP + ESPAsyncWebServer; TEMPLATE_PLACEHOLDER via build_flags
+- migrated filesystem from SPIFFS to LittleFS (dirs created on mount; OTA accepts littlefs/spiffs names)
+- dropped private rtc_wdt WDT calls; gated public WDT relax behind RELAX_WDT_FOR_ASYNCTCP
+- fixed HTTP_Local_JS preference check (.uint8); local JS no longer claims gzip encoding
+- sources under src/, shared header under include/; 4.x path = bump platform pin and retest
+
 1.5 (2024.12.18)
 - updated code to compile against ESP3+ API, Arduino 2+ and latest asynce libraries
 

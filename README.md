@@ -4,7 +4,7 @@ PIDKiln is PID temperature controller, for any task involving high temperatures 
 ## Key features:
 - Interface accessible both from LCD screen and WWW Webpage
 - Unlimited (limited only by storage) temperature programs number, program file size limited to 10KiB (but this is artificial limit - can be extended)
-- Internal ESP SPIFFS storage for programs, data, logs, configuration (perhaps later SD - but I'm not sure yet)
+- Internal ESP LittleFS storage for programs, data, logs, configuration (perhaps later SD - but I'm not sure yet)
 - Local preferences on disk, editable with Web interface
 - Online monitoring, program management, editing, graphs and kiln control
 - Build in clock synchronised with NTP servers (if Internet connected)
@@ -161,21 +161,33 @@ GND   | GND
 Preferably you should power your PIDKiln device with regulated 5V. This way you can power ESP32 board through VIN (do not use VIN and USB at once!) pin and use 5V to directly power EMR relay (around 185mA) and LCD backlight (depends of brightness).
 You could power board with just USB, but 5V output from my board (ESP32-Wrover TTGO with microsd) is too weak to handle EMR and LCD and most of other boards even do not have 5V out. You could also use VIN as 5V Vout (this pin should be connected directly to USB 5V output) - but then you are limited by USB output and how much board traces can handle.
 
-## Installation
+## Installation (PlatformIO — supported path)
 
-This is short version - for detailed one, please see [Wiki documentation](https://github.com/Saur0o0n/pidkiln/wiki/Hardware-assembly)
+PIDKiln **v1.6+** builds with **PlatformIO** and the **pioarduino** ESP32 platform (Arduino-ESP32 **3.3.x**). Dependencies are pinned in [`platformio.ini`](platformio.ini).
 
-- Assembly hardware, as specified above.
-- Clone git into the Arduino user programs directory (on Linux "/home/username/Arduino/").
-- You have to already have installed ESP32 framework (PIDKiln <v1.2 requires ESP32 <2.0.x, PIDKiln v1.2+ requires ESP32 2.0.x and PIDKiln v1.5+ ESP32 3.x) - if don't, do it now (https://github.com/espressif/arduino-esp32/blob/master/docs/arduino-ide/boards_manager.md).
-- Don't forget about ESP32FS plugin (drop it to "/home/username/Arduino/tools")
-- Install required additional libraries (not all can be installed from Arduino IDE Library Manager): [ESPAsyncWebServer](https://github.com/me-no-dev/ESPAsyncWebServer), [AsyncTCP](https://github.com/me-no-dev/AsyncTCP), [PID Library](https://github.com/br3ttb/Arduino-PID-Library/), [u8g2](https://github.com/olikraus/u8g2) and perhaps [emon](https://github.com/openenergymonitor/EmonLib) if you plan to use power meter. Since PIDKiln 1.1 you also need [Syslog](https://github.com/arcao/Syslog) library.
-- Install also (this has changed in PIDKiln v1.1) [my clone of MAX31855](https://github.com/Saur0o0n/MAX31855) - this implements second HW SPI for ESP32.
-- Update (there is no other way to do it) libraries/ESPAsyncWebServer/src/WebResponseImpl.h variable TEMPLATE_PLACEHOLDER to '~'.
-- For production use, disable serial debug in PIDKiln.ino - set it on false (''#define DEBUG false'')
-- Compile and upload.
-- Open data/etc/pidkiln.conf and edit your WiFi credentials (if you want to use) and, if you want, some additional parameters.
-- Upload sketch data (from data directory) to ESP32 SPIFFS with help of ESP32FS plugin (in Arduino IDE go to Menu->Tools->ESP32 Sketch Data Upload).
+This is the short version — for hardware assembly see the [Wiki](https://github.com/Saur0o0n/pidkiln/wiki/Hardware-assembly).
+
+1. Assemble hardware as specified above.
+2. Install [PlatformIO Core](https://platformio.org/install/cli) (or the VS Code / Cursor PlatformIO extension).
+3. Clone this repository and open it as the PlatformIO project root.
+4. Edit [`data/etc/pidkiln.conf`](data/etc/pidkiln.conf) for WiFi credentials and preferences.
+5. Build and flash firmware (Wrover / PSRAM default env):
+   - `pio run -e esp32-wrover`
+   - `pio run -e esp32-wrover -t upload`
+6. Upload the LittleFS image from `data/`:
+   - `pio run -e esp32-wrover -t uploadfs`
+7. For boards without PSRAM use `-e esp32-wroom` instead.
+8. For production, set `-DDEBUG=0` in `platformio.ini` `build_flags` (or remove `-DDEBUG=1`).
+
+**Migrating from SPIFFS (v1.5 and older):** there is no in-place conversion. Backup programs and `pidkiln.conf`, flash the new firmware + LittleFS image, then restore files via the web UI or by editing `data/` before `uploadfs`.
+
+**Web OTA:** upload a firmware `.bin`, or a filesystem image whose name contains `littlefs` or legacy `spiffs`. The partition update command remains Arduino’s `U_SPIFFS` (filesystem partition), even when the image content is LittleFS.
+
+**Arduino-ESP32 4.x:** not validated in this release. Expect a platform URL pin bump in `platformio.ini` plus retest of AsyncTCP, WDT, and OTA.
+
+### Legacy Arduino IDE notes
+
+Arduino IDE is no longer the supported install path. Historical core matrix: PIDKiln &lt;v1.2 → ESP32 &lt;2.0.x; v1.2+ → 2.0.x; v1.5+ → 3.x; v1.6+ → 3.3.x via PlatformIO/pioarduino. Libraries are now locked in `platformio.ini` (ESP32Async forks, not me-no-dev). Template delimiter `~` is set by `-DTEMPLATE_PLACEHOLDER=126` (ASCII for `~`) — no manual library patch.
 
 ## Documentation
 
