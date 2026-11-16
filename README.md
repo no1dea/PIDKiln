@@ -163,7 +163,7 @@ You could power board with just USB, but 5V output from my board (ESP32-Wrover T
 
 ## Installation (PlatformIO — supported path)
 
-PIDKiln **v1.6+** builds with **PlatformIO** and the **pioarduino** ESP32 platform (Arduino-ESP32 **3.3.x**). Dependencies are pinned in [`platformio.ini`](platformio.ini).
+PIDKiln **v1.6+** builds with **PlatformIO** and the **pioarduino** ESP32 platform (Arduino-ESP32 **3.3.x**). Dependencies are pinned in [`platformio.ini`](platformio.ini), including **Adafruit MAX31855** + **Adafruit BusIO** for the HSPI thermocouple path (replacing the old Saur0o0n/enjoyneering fork).
 
 This is the short version — for hardware assembly see the [Wiki](https://github.com/Saur0o0n/pidkiln/wiki/Hardware-assembly).
 
@@ -215,7 +215,7 @@ pio test -e native
 
 ### Legacy Arduino IDE notes
 
-Arduino IDE is no longer the supported install path. Historical core matrix: PIDKiln &lt;v1.2 → ESP32 &lt;2.0.x; v1.2+ → 2.0.x; v1.5+ → 3.x; v1.6+ → 3.3.x via PlatformIO/pioarduino. Libraries are now locked in `platformio.ini` (ESP32Async forks, not me-no-dev). Template delimiter `~` is set by `-DTEMPLATE_PLACEHOLDER=126` (ASCII for `~`) — no manual library patch.
+Arduino IDE is no longer the supported install path. Historical core matrix: PIDKiln &lt;v1.2 → ESP32 &lt;2.0.x; v1.2+ → 2.0.x; v1.5+ → 3.x; v1.6+ → 3.3.x via PlatformIO/pioarduino. Libraries are now locked in `platformio.ini` (ESP32Async forks, not me-no-dev; Adafruit MAX31855 + BusIO for thermocouples). Template delimiter `~` is set by `-DTEMPLATE_PLACEHOLDER=126` (ASCII for `~`) — no manual library patch.
 
 ## Documentation
 
