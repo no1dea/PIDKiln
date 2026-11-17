@@ -486,6 +486,8 @@ static void handleChartJson(AsyncWebServerRequest *request) {
   if (request->hasParam("since")) {
     since = (uint32_t)strtoul(request->getParam("since")->value().c_str(), NULL, 10);
   }
+  /* Incremental polls keep program polyline client-side — omit to cut payload */
+  const bool include_program = (since == 0);
 
   AsyncResponseStream *response = request->beginResponseStream("application/json");
   response->print('{');
@@ -506,7 +508,10 @@ static void handleChartJson(AsyncWebServerRequest *request) {
     response->print("null");
   }
   response->print(",\"program\":");
-  print_program_profile_json(response);
+  if (include_program)
+    print_program_profile_json(response);
+  else
+    response->print("null");
   response->print(",\"points\":");
   ChartRing_PrintPointsJson(*response, since);
   response->print('}');
@@ -774,53 +779,90 @@ int params = request->params();
 }
 
 
-// Handle json vars for js
-//
-String handleVars(const String& var){
-char str[48];
-struct tm timeinfo, *tmm;
-KilnTelemetry telem;
-Kiln_ReadTelemetry(&telem);
+static void json_copy_escaped(char *dst, size_t dst_len, const char *src) {
+  size_t j = 0;
+  if (!dst || dst_len == 0)
+    return;
+  if (!src) {
+    dst[0] = '\0';
+    return;
+  }
+  for (size_t i = 0; src[i] && j + 2 < dst_len; i++) {
+    char c = src[i];
+    if (c == '"' || c == '\\')
+      dst[j++] = '\\';
+    dst[j++] = c;
+  }
+  dst[j] = '\0';
+}
 
-  if(var=="KILN_TEMP") return http_fmt("%.2f", telem.kiln_temp);
-  else if(var=="SET_TEMP") return http_fmt("%.2f", telem.set_temp);
-  else if(var=="ENV_TEMP") return http_fmt("%.2f", telem.int_temp);
-  else if(var=="CASE_TEMP") return http_fmt("%.2f", telem.case_temp);
-  else if(var=="HEAT_TIME"){
-    double pct = 0;
-    if(telem.pid_window)
-      pct = (telem.pid_out / (double)telem.pid_window) * 100.0 * PID_WINDOW_DIVIDER;
-    return http_fmt("%.2f", pct);
+/* One-shot JSON for the dashboard poll — no LittleFS template / per-~VAR~ Strings */
+static void handleVarsJson(AsyncWebServerRequest *request) {
+  if (!_webAuth(request))
+    return;
+
+  KilnTelemetry telem;
+  Kiln_ReadTelemetry(&telem);
+
+  char curr_time[32] = "";
+  char prog_start[32] = "";
+  char prog_end[32] = "";
+  char step_raw[48];
+  char step_buf[64];
+  char log_raw[64] = "/logs/test.csv";
+  char log_path[72];
+  struct tm timeinfo, *tmm;
+
+  if (getLocalTime(&timeinfo))
+    strftime(curr_time, sizeof(curr_time), "%F %T", &timeinfo);
+  if (telem.program_run_start && (tmm = localtime(&telem.program_run_start)))
+    strftime(prog_start, sizeof(prog_start), "%F %T", tmm);
+  if (telem.program_run_end && (tmm = localtime(&telem.program_run_end)))
+    strftime(prog_end, sizeof(prog_end), "%F %T", tmm);
+
+  const char *label;
+  if (telem.program_run_state == PR_RUNNING)
+    label = (telem.temp_incr == 0) ? "Dwell" : "Running";
+  else if (telem.program_run_state < PR_end)
+    label = Prog_Run_Names[telem.program_run_state];
+  else
+    label = "unknown";
+  snprintf(step_raw, sizeof(step_raw), "%d of %u - %s", telem.program_run_step + 1,
+           telem.program_run_size, label);
+  json_copy_escaped(step_buf, sizeof(step_buf), step_raw);
+
+  if (CSVFile && CSVFile.path()) {
+    strncpy(log_raw, CSVFile.path(), sizeof(log_raw) - 1);
+    log_raw[sizeof(log_raw) - 1] = '\0';
   }
-  else if(var=="TEMP_CHANGE") return http_fmt("%.3f", (double)telem.temp_incr);
-  else if(var=="STEP"){
-    const char *label;
-    if(telem.program_run_state==PR_RUNNING)
-      label = (telem.temp_incr==0) ? "Dwell" : "Running";
-    else if(telem.program_run_state < PR_end)
-      label = Prog_Run_Names[telem.program_run_state];
-    else
-      label = "unknown";
-    return http_fmt("%d of %u - %s", telem.program_run_step+1, telem.program_run_size, label);
-  }
-  else if(var=="CURR_TIME"){
-    if(getLocalTime(&timeinfo)){
-      strftime(str, sizeof(str), "%F %T", &timeinfo);
-      return http_buf(str);
-    }
-  }else if(var=="PROG_START" && telem.program_run_start){
-    tmm = localtime(&telem.program_run_start);
-    strftime(str, sizeof(str), "%F %T", tmm);
-    return http_buf(str);
-  }else if(var=="PROG_END" && telem.program_run_end){
-    tmm = localtime(&telem.program_run_end);
-    strftime(str, sizeof(str), "%F %T", tmm);
-    return http_buf(str);
-  }else if(var=="LOG_FILE"){
-    if(CSVFile) return http_buf(CSVFile.path());
-    return String("/logs/test.csv");
-  }if(var=="PROGRAM_STATUS") return http_fmt("%u", telem.program_run_state);
-  else return String(" "); 
+  json_copy_escaped(log_path, sizeof(log_path), log_raw);
+
+  double heat_pct = 0;
+  if (telem.pid_window)
+    heat_pct = (telem.pid_out / (double)telem.pid_window) * 100.0 * PID_WINDOW_DIVIDER;
+
+  char body[768];
+  snprintf(
+      body, sizeof(body),
+      "{\"program_status\":%u,\"log_file\":\"%s\",\"pidkiln\":["
+      "{\"html_id\":\"#kiln_temp\",\"value\":\"%.2f\"},"
+      "{\"html_id\":\"#set_temp\",\"value\":\"%.2f\"},"
+      "{\"html_id\":\"#env_temp\",\"value\":\"%.2f\"},"
+      "{\"html_id\":\"#case_temp\",\"value\":\"%.2f\"},"
+      "{\"html_id\":\"#prog_start\",\"value\":\"%s\"},"
+      "{\"html_id\":\"#prog_end\",\"value\":\"%s\"},"
+      "{\"html_id\":\"#curr_time\",\"value\":\"%s\"},"
+      "{\"html_id\":\"#heat_time\",\"value\":\"%.2f\"},"
+      "{\"html_id\":\"#temp_change\",\"value\":\"%.3f\"},"
+      "{\"html_id\":\"#step\",\"value\":\"%s\"}"
+      "]}",
+      (unsigned)telem.program_run_state, log_path, telem.kiln_temp, telem.set_temp,
+      telem.int_temp, telem.case_temp, prog_start, prog_end, curr_time, heat_pct,
+      (double)telem.temp_incr, step_buf);
+
+  AsyncWebServerResponse *r =
+      request->beginResponse(200, "application/json; charset=utf-8", body);
+  request->send(r);
 }
 
 
@@ -922,11 +964,7 @@ void SETUP_WebServer(void) {
     });
   }
 
-  server.on("/PIDKiln_vars.json", HTTP_GET, [](AsyncWebServerRequest *request) {
-    if (!_webAuth(request))
-      return;
-    request->send(LittleFS, "/PIDKiln_vars.json", "application/json", false, handleVars);
-  });
+  server.on("/PIDKiln_vars.json", HTTP_GET, handleVarsJson);
 
   server.on("/PIDKiln_chart.json", HTTP_GET, handleChartJson);
 

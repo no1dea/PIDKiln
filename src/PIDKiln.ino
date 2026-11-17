@@ -114,6 +114,7 @@ void setup() {
   Generate_INDEX();
 
 #if PK_FEATURE_LOGS
+  Setup_Logs();
   Load_LOGS_Dir();
   Clean_LOGS();
   Generate_LOGS_INDEX();

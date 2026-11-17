@@ -3,16 +3,27 @@
 #include "PIDKiln.h"
 /*
 ** Logging functionality + live chart ring (RAM)
-**
+** CSV writes run on a low-prio logger task so Program_Loop never blocks on LittleFS.
 */
 
-double EnW_last=0;    // last energy consumption for csv report
+double EnW_last = 0;
 
 /* ~24h at 30s LOG_Window; PSRAM preferred via MALLOC */
 #define CHART_RING_CAP 2880
+/* Cap full chart HTTP dumps (incremental ?since= stays small) */
+#define CHART_HTTP_FULL_MAX_POINTS 720
+#define LOG_QUEUE_LEN 16
+#define LOG_FLUSH_EVERY 4
 
 struct ChartSample {
   uint32_t t;
+  int16_t k;
+  int16_t c;
+  int16_t e;
+};
+
+struct LogQueueItem {
+  uint32_t ts;
   int16_t k;
   int16_t c;
   int16_t e;
@@ -22,6 +33,10 @@ static ChartSample *chart_ring = NULL;
 static uint16_t chart_head = 0;
 static uint16_t chart_count = 0;
 static uint32_t chart_gen = 0;
+
+static QueueHandle_t log_queue = NULL;
+static SemaphoreHandle_t log_fs_mutex = NULL;
+static uint8_t log_unflushed = 0;
 
 static bool chart_ring_ensure(void) {
   if (chart_ring)
@@ -62,9 +77,15 @@ void ChartRing_PrintPointsJson(Print &out, uint32_t since_ts) {
     out.print(']');
     return;
   }
-  uint16_t start = (uint16_t)((chart_head + CHART_RING_CAP - chart_count) % CHART_RING_CAP);
+  uint16_t start =
+      (uint16_t)((chart_head + CHART_RING_CAP - chart_count) % CHART_RING_CAP);
+  uint16_t emit_from = 0;
+  /* Full dump: skip oldest beyond HTTP cap to bound response size */
+  if (since_ts == 0 && chart_count > CHART_HTTP_FULL_MAX_POINTS)
+    emit_from = (uint16_t)(chart_count - CHART_HTTP_FULL_MAX_POINTS);
+
   bool first = true;
-  for (uint16_t i = 0; i < chart_count; i++) {
+  for (uint16_t i = emit_from; i < chart_count; i++) {
     const ChartSample &s = chart_ring[(start + i) % CHART_RING_CAP];
     if (s.t <= since_ts)
       continue;
@@ -72,207 +93,281 @@ void ChartRing_PrintPointsJson(Print &out, uint32_t since_ts) {
       out.print(',');
     first = false;
 #if PK_FEATURE_ENERGY
-    out.printf("{\"t\":%lu,\"k\":%d,\"c\":%d,\"e\":%d}", (unsigned long)s.t, (int)s.k,
-               (int)s.c, (int)s.e);
+    out.printf("{\"t\":%lu,\"k\":%d,\"c\":%d,\"e\":%d}", (unsigned long)s.t,
+               (int)s.k, (int)s.c, (int)s.e);
 #else
-    out.printf("{\"t\":%lu,\"k\":%d,\"c\":%d}", (unsigned long)s.t, (int)s.k, (int)s.c);
+    out.printf("{\"t\":%lu,\"k\":%d,\"c\":%d}", (unsigned long)s.t, (int)s.k,
+               (int)s.c);
 #endif
   }
   out.print(']');
 }
 
+static void log_fs_lock(void) {
+  if (log_fs_mutex)
+    xSemaphoreTake(log_fs_mutex, portMAX_DELAY);
+}
 
-// Starts a new log file
-//
-void Init_log_file(){
-char str[33];
-struct tm timeinfo, *tmm;
+static void log_fs_unlock(void) {
+  if (log_fs_mutex)
+    xSemaphoreGive(log_fs_mutex);
+}
+
+static void log_write_sample(const LogQueueItem &item) {
+  char timestr[32];
+  char line[80];
+  struct tm timeinfo;
+
+  if (!CSVFile)
+    return;
+
+  time_t t = (time_t)item.ts;
+  if (localtime_r(&t, &timeinfo))
+    strftime(timestr, sizeof(timestr), "%F %T", &timeinfo);
+  else
+    snprintf(timestr, sizeof(timestr), "%lu", (unsigned long)item.ts);
+
+#if PK_FEATURE_ENERGY
+  snprintf(line, sizeof(line), "%s,%d,%d,%d", timestr, (int)item.k, (int)item.c,
+           (int)item.e);
+#else
+  snprintf(line, sizeof(line), "%s,%d,%d", timestr, (int)item.k, (int)item.c);
+#endif
+
+  CSVFile.println();
+  CSVFile.print(line);
+  if (++log_unflushed >= LOG_FLUSH_EVERY) {
+    CSVFile.flush();
+    log_unflushed = 0;
+  }
+}
+
+static void Logger_Loop(void *parameter) {
+  (void)parameter;
+  LogQueueItem item;
+  for (;;) {
+    if (xQueueReceive(log_queue, &item, portMAX_DELAY) != pdTRUE)
+      continue;
+    log_fs_lock();
+    log_write_sample(item);
+    log_fs_unlock();
+  }
+}
+
+static void Logs_EnsureWorker(void) {
+  if (!log_fs_mutex)
+    log_fs_mutex = xSemaphoreCreateMutex();
+  if (!log_queue) {
+    log_queue = xQueueCreate(LOG_QUEUE_LEN, sizeof(LogQueueItem));
+    if (log_queue) {
+      xTaskCreatePinnedToCore(Logger_Loop, "Logger", 4096, NULL, 1, NULL, 1);
+    }
+  }
+}
+
+void Setup_Logs(void) { Logs_EnsureWorker(); }
+
+static void log_queue_drain(uint32_t timeout_ms) {
+  if (!log_queue)
+    return;
+  TickType_t start = xTaskGetTickCount();
+  TickType_t budget = pdMS_TO_TICKS(timeout_ms);
+  while (uxQueueMessagesWaiting(log_queue) > 0) {
+    if ((xTaskGetTickCount() - start) > budget)
+      break;
+    vTaskDelay(pdMS_TO_TICKS(10));
+  }
+}
+
+void Init_log_file() {
+  char str[33];
+  struct tm timeinfo, *tmm;
+
+  Logs_EnsureWorker();
+  log_queue_drain(500);
+  log_fs_lock();
 
   ChartRing_Clear();
+  log_unflushed = 0;
 
-  if(CSVFile) CSVFile.close();
-  if(getLocalTime(&timeinfo)) strftime(str, 32, "/logs/%y%m%d_%H%M%S.csv", &timeinfo); //YYMMDD_HHMMSS.log
-  else sprintf(str,"/logs/%d.csv",millis());  // if we don't have a clock - use millis - this should NOT happend
-  DBG dbgLog(LOG_INFO,"[LOG] Trying to create log file:%s\n",str);
-  
-  if(CSVFile=LittleFS.open(str, "w")){
-    DBG dbgLog(LOG_INFO,"[LOG] Created new log file %s\n",str);
+  if (CSVFile)
+    CSVFile.close();
+  if (getLocalTime(&timeinfo))
+    strftime(str, 32, "/logs/%y%m%d_%H%M%S.csv", &timeinfo);
+  else
+    sprintf(str, "/logs/%d.csv", (int)millis());
+  DBG dbgLog(LOG_INFO, "[LOG] Trying to create log file:%s\n", str);
+
+  if ((CSVFile = LittleFS.open(str, "w"))) {
+    DBG dbgLog(LOG_INFO, "[LOG] Created new log file %s\n", str);
 #if PK_FEATURE_ENERGY
-    CSVFile.print(String("Date,Temperature,Housing,Energy"));
+    CSVFile.print("Date,Temperature,Housing,Energy");
 #else
-    CSVFile.print(String("Date,Temperature,Housing"));
+    CSVFile.print("Date,Temperature,Housing");
 #endif
   }
 
-  // Try to create additional info-log file if not.. well
-  char *tmpstr;
-  tmpstr=strstr(str,".csv");
-  if(tmpstr){
-    strncpy(tmpstr,".log",4);
-    if(LOGFile=LittleFS.open(str, "w")){
-      LOGFile.printf("Program name: %s\n",Program_run_name);
-      LOGFile.printf("Program desc: %s\n",Program_run_desc);
-      if(tmm = localtime(&Program_run_start)){
+  char *tmpstr = strstr(str, ".csv");
+  if (tmpstr) {
+    strncpy(tmpstr, ".log", 4);
+    if ((LOGFile = LittleFS.open(str, "w"))) {
+      LOGFile.printf("Program name: %s\n", Program_run_name);
+      LOGFile.printf("Program desc: %s\n", Program_run_desc);
+      if ((tmm = localtime(&Program_run_start))) {
         strftime(str, 29, "%F %T", tmm);
         LOGFile.printf("Started at: %s\n", str);
       }
-      if(tmm = localtime(&Program_run_end)){
+      if ((tmm = localtime(&Program_run_end))) {
         strftime(str, 29, "%F %T", tmm);
         LOGFile.printf("Possible end at: %s\n", str);
       }
-      LOGFile.printf("PID values. Kp:%.2f Ki:%.2f Kd:%.2f\n",Prefs[PRF_PID_KP].value.vfloat,Prefs[PRF_PID_KI].value.vfloat,Prefs[PRF_PID_KD].value.vfloat);
-      LOGFile.printf("Start temperature: %.1fC\n",kiln_temp);
-      LOGFile.printf("CSV filename: %s\n-=-=-= Starting program =-=-=-=-\n",str);
+      LOGFile.printf("PID values. Kp:%.2f Ki:%.2f Kd:%.2f\n",
+                     Prefs[PRF_PID_KP].value.vfloat, Prefs[PRF_PID_KI].value.vfloat,
+                     Prefs[PRF_PID_KD].value.vfloat);
+      LOGFile.printf("Start temperature: %.1fC\n", kiln_temp);
+      LOGFile.printf("CSV filename: %s\n-=-=-= Starting program =-=-=-=-\n", str);
       LOGFile.flush();
-//      LOGFile.close();
-    }else{
-      DBG dbgLog(LOG_ERR,"[LOG] Failed to create .log file: %s\n",str);
+    } else {
+      DBG dbgLog(LOG_ERR, "[LOG] Failed to create .log file: %s\n", str);
     }
   }
-  
-  EnW_last=0;   // reset last energy consumption with new program
-  
+
+  EnW_last = 0;
+  log_fs_unlock();
+
   Generate_LOGS_INDEX();
 }
 
+void Add_log_line() {
+  LogQueueItem item;
+  int energy_delta = 0;
 
-// Add single log line with current date and temperature
-//
-void Add_log_line(){
-String tmp;
-char str[33];
-struct tm timeinfo;
-int energy_delta = 0;
-uint32_t ts;
-
-  if(!CSVFile) return;
-
-  ts = (uint32_t)time(NULL);
-  if (getLocalTime(&timeinfo))
-    strftime(str, 29, "%F %T", &timeinfo);
-  else
-    sprintf(str, "%d", (int)millis());
+  item.ts = (uint32_t)time(NULL);
+  item.k = (int16_t)kiln_temp;
+  item.c = (int16_t)case_temp;
 
 #if PK_FEATURE_ENERGY
   energy_delta = (int)(Energy_Usage - EnW_last);
   EnW_last = Energy_Usage;
-  tmp = String(str) + "," + String(kiln_temp, 0) + "," + String(case_temp, 0) + "," +
-        String(energy_delta);
-#else
-  tmp = String(str) + "," + String(kiln_temp, 0) + "," + String(case_temp, 0);
 #endif
+  item.e = (int16_t)energy_delta;
 
-  ChartRing_Push(ts, (int16_t)kiln_temp, (int16_t)case_temp, (int16_t)energy_delta);
+  /* RAM chart stays on the caller — never wait on FS */
+  ChartRing_Push(item.ts, item.k, item.c, item.e);
 
-  DBG dbgLog(LOG_INFO,"[LOG] Writing to log file:%s\n",tmp.c_str());
-  CSVFile.println();
-  CSVFile.print(tmp);
-  CSVFile.flush();
+  Logs_EnsureWorker();
+  if (!log_queue || !CSVFile)
+    return;
+
+  /* Non-blocking: drop sample rather than stall SSR/PID */
+  if (xQueueSend(log_queue, &item, 0) != pdTRUE) {
+    DBG dbgLog(LOG_WARNING, "[LOG] Queue full — CSV sample dropped\n");
+  }
 }
 
+void Close_log_file() {
+  struct tm *tmm;
+  char str[33];
 
-// Closes cleanly log file
-//
-void Close_log_file(){
-struct tm timeinfo, *tmm;
-char str[33];
+  log_queue_drain(2000);
+  log_fs_lock();
 
-  if(CSVFile){
+  if (CSVFile) {
     CSVFile.flush();
     CSVFile.close();
   }
-  if(LOGFile){
-    if(tmm = localtime(&Program_run_end)){
+  log_unflushed = 0;
+
+  if (LOGFile) {
+    if ((tmm = localtime(&Program_run_end))) {
       strftime(str, 29, "%F %T", tmm);
       LOGFile.printf("Program ended at: %s\n", str);
     }
-    LOGFile.printf("End temperature: %.1fC\n",kiln_temp);
-    if(Energy_Wattage) LOGFile.printf("Used power: %.1f W/h\n",Energy_Wattage);
-    if(Program_error){
-      LOGFile.printf("Program aborted with error: %d\n",Program_error);
-    }
+    LOGFile.printf("End temperature: %.1fC\n", kiln_temp);
+    if (Energy_Wattage)
+      LOGFile.printf("Used power: %.1f W/h\n", Energy_Wattage);
+    if (Program_error)
+      LOGFile.printf("Program aborted with error: %d\n", Program_error);
     LOGFile.flush();
     LOGFile.close();
   }
+  log_fs_unlock();
+
   Clean_LOGS();
   Generate_LOGS_INDEX();
 }
 
+void Clean_LOGS() {
+  char fname[MAX_FILENAME];
 
-// Function leans logs on LittleFS depending on preferences value "LOG_Files_Limit"
-//
-void Clean_LOGS(){
-char fname[MAX_FILENAME];
-
-  if(Logs_DIR_size<=Prefs[PRF_LOG_LIMIT].value.uint16) return;
-  DBG dbgLog(LOG_INFO,"[LOG] Cleaning logs...\n");
-  for(uint16_t a=Prefs[PRF_LOG_LIMIT].value.uint16; a<Logs_DIR_size; a++){
-    sprintf(fname,"%s/%s",LOG_Directory,Logs_DIR[a].filename);
-    DBG dbgLog(LOG_INFO,"[LOG] Deleting file:%s\n",fname);
+  if (Logs_DIR_size <= Prefs[PRF_LOG_LIMIT].value.uint16)
+    return;
+  DBG dbgLog(LOG_INFO, "[LOG] Cleaning logs...\n");
+  for (uint16_t a = Prefs[PRF_LOG_LIMIT].value.uint16; a < Logs_DIR_size; a++) {
+    sprintf(fname, "%s/%s", LOG_Directory, Logs_DIR[a].filename);
+    DBG dbgLog(LOG_INFO, "[LOG] Deleting file:%s\n", fname);
     LittleFS.remove(fname);
   }
 }
 
-
-// Load logs directory into memory - to sort it etc for easier processing PSMmem is plenty
-//
-uint8_t Load_LOGS_Dir(){
-uint16_t count=0;
-File dir,file;
+uint8_t Load_LOGS_Dir() {
+  uint16_t count = 0;
+  File dir, file;
 
   dir = LittleFS.open(LOG_Directory);
-  if(!dir) return 1;  // directory open failed
-  DBG dbgLog(LOG_INFO,"[LOG] Loading dir: Loading logs directory...\n");
-  while(dir.openNextFile()) count++;  // not the prettiest - but we count files first to do proper malloc without fragmenting memory
-  
-  DBG dbgLog(LOG_INFO,"[LOG] Loading dir:\tcounted %d files\n",count);
-  if(Logs_DIR){
+  if (!dir)
+    return 1;
+  DBG dbgLog(LOG_INFO, "[LOG] Loading dir: Loading logs directory...\n");
+  while (dir.openNextFile())
+    count++;
+
+  DBG dbgLog(LOG_INFO, "[LOG] Loading dir:\tcounted %d files\n", count);
+  if (Logs_DIR) {
     free(Logs_DIR);
-    Logs_DIR=NULL;
+    Logs_DIR = NULL;
   }
-  Logs_DIR=(DIRECTORY*)MALLOC(sizeof(DIRECTORY)*count);
-  Logs_DIR_size=0;
+  Logs_DIR = (DIRECTORY *)MALLOC(sizeof(DIRECTORY) * count);
+  Logs_DIR_size = 0;
   dir.rewindDirectory();
-  while((file=dir.openNextFile()) && Logs_DIR_size<=count){    // now we do acctual loading into memory
+  while ((file = dir.openNextFile()) && Logs_DIR_size <= count) {
     char tmp[32];
     uint8_t len2;
 
     vTaskDelay(20);
-    strcpy(tmp,file.name());
-    len2=strlen(tmp);
-    if(len2>31 || len2<2) return 2; // file name with dir too long or just /
-    
-    // LEGACY: skip on-disk index.html left from when indexes were written to the FS
-    if(!strcmp(tmp,"index.html")) continue;
-    
-    strcpy(Logs_DIR[Logs_DIR_size].filename,tmp);
-    Logs_DIR[Logs_DIR_size].filesize=file.size();
-    Logs_DIR[Logs_DIR_size].sel=0;
-    
-    DBG dbgLog(LOG_DEBUG,"[LOG] FName: %s\t FSize:%d\tSel:%d\n",Logs_DIR[Logs_DIR_size].filename,Logs_DIR[Logs_DIR_size].filesize,Logs_DIR[Logs_DIR_size].sel);
-    
+    strcpy(tmp, file.name());
+    len2 = strlen(tmp);
+    if (len2 > 31 || len2 < 2)
+      return 2;
+
+    if (!strcmp(tmp, "index.html"))
+      continue;
+
+    strcpy(Logs_DIR[Logs_DIR_size].filename, tmp);
+    Logs_DIR[Logs_DIR_size].filesize = file.size();
+    Logs_DIR[Logs_DIR_size].sel = 0;
+
+    DBG dbgLog(LOG_DEBUG, "[LOG] FName: %s\t FSize:%d\tSel:%d\n",
+               Logs_DIR[Logs_DIR_size].filename, Logs_DIR[Logs_DIR_size].filesize,
+               Logs_DIR[Logs_DIR_size].sel);
+
     Logs_DIR_size++;
   }
   dir.close();
 
-  // sorting... slooow but easy
-  bool nok=true;
-  while(nok){
-    nok=false;
-    if(Logs_DIR_size>1) // if we have at least 2 logs
-      for(int a=0; a<Logs_DIR_size-1; a++){
+  bool nok = true;
+  while (nok) {
+    nok = false;
+    if (Logs_DIR_size > 1)
+      for (int a = 0; a < Logs_DIR_size - 1; a++) {
         DIRECTORY tmp;
-        if(strcmp(Logs_DIR[a].filename,Logs_DIR[a+1].filename)<0){
-          tmp=Logs_DIR[a];
-          Logs_DIR[a]=Logs_DIR[a+1];
-          Logs_DIR[a+1]=tmp;
-          nok=true;
+        if (strcmp(Logs_DIR[a].filename, Logs_DIR[a + 1].filename) < 0) {
+          tmp = Logs_DIR[a];
+          Logs_DIR[a] = Logs_DIR[a + 1];
+          Logs_DIR[a + 1] = tmp;
+          nok = true;
         }
-      }    
-   }
+      }
+  }
 
-  //if(Logs_DIR_size) Logs_DIR[0].sel=1; // make first log seleted if we have at least one
   return 0;
 }
-
-

@@ -5,21 +5,11 @@ void dbgLog(uint16_t pri, const char *fmt, ...) {
   if (!Prefs[PRF_DBG_SERIAL].value.uint8 && !Prefs[PRF_DBG_SYSLOG].value.uint8)
     return;
 
-  char *message;
+  char message[256];
   va_list args;
-  size_t initialLen;
-  size_t len;
-
-  initialLen = strlen(fmt);
-  message = new char[initialLen + 1];
 
   va_start(args, fmt);
-  len = vsnprintf(message, initialLen + 1, fmt, args);
-  if (len > initialLen) {
-    delete[] message;
-    message = new char[len + 1];
-    vsnprintf(message, len + 1, fmt, args);
-  }
+  vsnprintf(message, sizeof(message), fmt, args);
   va_end(args);
 
   if (Prefs[PRF_DBG_SERIAL].value.uint8)
@@ -30,8 +20,6 @@ void dbgLog(uint16_t pri, const char *fmt, ...) {
 #else
   (void)pri;
 #endif
-
-  delete[] message;
 }
 
 void initSerial() {

@@ -1,6 +1,7 @@
 #include <Adafruit_MAX31855.h>
 #include <math.h>
 #include "PIDKiln.h"
+#include "PIDKiln_max31855_decode.h"
 
 extern SPIClass *Kiln_Get_MAX_SPI();
 
@@ -28,36 +29,29 @@ void Update_TemperatureB() {
   if (!ThermocoupleB)
     return;
 
-  double case_tmp1;
-  double int_tmp1;
-  uint8_t err;
+  uint32_t raw = Max31855_SpiRead32(Kiln_Get_MAX_SPI(), MAXCS2);
+  Max31855Sample sample = Max31855_Decode(raw, MAX31855_FAULT_ALL);
 
-  int_tmp1 = ThermocoupleB->readInternal();
-  case_tmp1 = ThermocoupleB->readCelsius();
-
-  if (isnan(case_tmp1)) {
-    err = ThermocoupleB->readError();
-    if (err == 0 || err == MAX31855_FAULT_ALL) {
+  if (!sample.ok) {
+    if (sample.fault == 0 || sample.fault == MAX31855_FAULT_ALL) {
       DBG dbgLog(LOG_ERR, "[HOUSING] MAX31855 ThermocoupleB did not respond\n");
       ABORT_Program(PR_ERR_MAX31B_NC);
       return;
     }
-    Handle_ThermocoupleB_Fault(err);
+    Handle_ThermocoupleB_Fault(sample.fault);
     return;
   }
 
-  int_temp = (int_temp + int_tmp1) / 2;
-  case_temp = (case_temp * 0.8 + case_tmp1 * 0.2);
+  int_temp = (int_temp + sample.internal_c) / 2;
+  case_temp = (case_temp * 0.8 + sample.tc_c * 0.2);
 
   if (TempB_errors > 0)
     TempB_errors--;
-
-  DBG dbgLog(LOG_DEBUG,
-             "[HOUSING] Sensor B: Internal=%.1f Last=%.1f Avg case=%.1f\n",
-             int_temp, case_tmp1, case_temp);
 }
 
 void Setup_Housing_TC() {
+  pinMode(MAXCS2, OUTPUT);
+  digitalWrite(MAXCS2, HIGH);
   ThermocoupleB = new Adafruit_MAX31855(MAXCS2, Kiln_Get_MAX_SPI());
   if (!ThermocoupleB->begin()) {
     DBG dbgLog(LOG_ERR, "[HOUSING] MAX31855 ThermocoupleB begin() failed\n");

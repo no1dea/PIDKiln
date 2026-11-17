@@ -129,7 +129,7 @@
     }
     lastGen = payload.gen;
 
-    if (!incremental && payload.program) {
+    if (!incremental && payload.program && payload.program.length) {
       programPts = payload.program.slice();
     }
 

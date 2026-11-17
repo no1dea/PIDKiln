@@ -4,6 +4,9 @@
 #define ENERGY_MON_AMPS 30
 #define EMERGY_MON_VOLTAGE 230
 #define ENERGY_IGNORE_VALUE 0.4
+/* Fewer ADC samples + slower poll — calcIrms is a busy-wait */
+#define ENERGY_IRMS_SAMPLES 148
+#define ENERGY_POLL_MS 500
 
 static EnergyMonitor emon1;
 
@@ -12,7 +15,7 @@ void Read_Energy_INPUT() {
   static uint8_t cnt = 0;
   static uint32_t last = 0;
 
-  Irms = emon1.calcIrms(512);
+  Irms = emon1.calcIrms(ENERGY_IRMS_SAMPLES);
   if (Irms < ENERGY_IGNORE_VALUE) {
     Energy_Wattage = 0;
     return;
@@ -37,7 +40,7 @@ static void Power_Loop(void *parameter) {
   (void)parameter;
   for (;;) {
     Read_Energy_INPUT();
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+    vTaskDelay(ENERGY_POLL_MS / portTICK_PERIOD_MS);
   }
 }
 

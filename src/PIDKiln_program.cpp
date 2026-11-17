@@ -417,7 +417,7 @@ static boolean is_it_dwell=false;
         Program_recalculate_ETA(true);  // recalculate ETA for dwell
       }
     }
-    DBG dbgLog(LOG_INFO,"[PRG] Curr temp: %.0f, Set_temp: %.0f, Incr: %.2f Pid_out:%.2f Step: %d\n", kiln_temp, set_temp, temp_incr, pid_out*PID_WINDOW_DIVIDER, Program_run_step);
+    DBG dbgLog(LOG_DEBUG,"[PRG] Curr temp: %.0f, Set_temp: %.0f, Incr: %.2f Pid_out:%.2f Step: %d\n", kiln_temp, set_temp, temp_incr, pid_out*PID_WINDOW_DIVIDER, Program_run_step);
   }
 
   if(Program_run_state!=PR_PAUSED && Program_run_state!=PR_THRESHOLD) set_temp+=temp_incr;  // increase desire temperature...
@@ -446,6 +446,7 @@ void START_Program(){
 
   //tell the PID to range between 0 and the full window size/PID_WINDOW_DIVIDER. It's divided by 100 (default value of PID_WINDOW_DIVIDER) to have minimal window size faster above 1/25s - so SSR will be able to switch (zero switch)
   KilnPID.SetOutputLimits(0, Prefs[PRF_PID_WINDOW].value.uint16/PID_WINDOW_DIVIDER);
+  KilnPID.SetSampleTime(1000); /* match 1 Hz TC update */
   KilnPID.SetMode(AUTOMATIC);
 
   DBG dbgLog(LOG_INFO,"[PRG] Trying to start log - window size:%d\n",Prefs[PRF_LOG_WINDOW].value.uint16);
@@ -534,11 +535,7 @@ uint32_t now;
         Kiln_PublishTelemetry();
       }
 #endif
-#if PK_FEATURE_ENERGY
-      if(cnt1==4){
-        Read_Energy_INPUT();
-      }
-#endif
+      /* Energy metering runs only on Power_Loop when PK_FEATURE_ENERGY=1 */
       // Ask Input_Loop to redraw main views — keep LCD off the control path
 #if PK_FEATURE_LOCAL_UI
       if(LCD_State==SCR_MAIN_VIEW && Program_run_size && LCD_Main==MAIN_VIEW1)
@@ -557,7 +554,7 @@ uint32_t now;
           if(LCD_Main==MAIN_VIEW2 && (Program_run_state==PR_RUNNING || Program_run_state==PR_PAUSED))
             Kiln_RequestLcdRefresh(LCD_REFRESH_MAIN_V2);
 #endif
-          DBG dbgLog(LOG_INFO,"[PRG] Pid_out RAW:%.2f Pid_out:%.2f Now-window:%d WindowSize:%d Prg_state:%d\n",pid_out,pid_out*PID_WINDOW_DIVIDER,(now - windowStartTime), Prefs[PRF_PID_WINDOW].value.uint16, (byte)Program_run_state);
+          DBG dbgLog(LOG_DEBUG,"[PRG] Pid_out RAW:%.2f Pid_out:%.2f Now-window:%d WindowSize:%d Prg_state:%d\n",pid_out,pid_out*PID_WINDOW_DIVIDER,(now - windowStartTime), Prefs[PRF_PID_WINDOW].value.uint16, (byte)Program_run_state);
         }
        }
     }

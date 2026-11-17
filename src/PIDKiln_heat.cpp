@@ -4,6 +4,7 @@
 #include <Adafruit_MAX31855.h>
 #include <math.h>
 #include "PIDKiln.h"
+#include "PIDKiln_max31855_decode.h"
 
 SPIClass *ESP32_SPI = new SPIClass(HSPI);
 Adafruit_MAX31855 ThermocoupleA(MAXCS1, ESP32_SPI);
@@ -57,37 +58,30 @@ static void Handle_ThermocoupleA_Fault(uint8_t err) {
 }
 
 void Update_TemperatureA() {
-  double kiln_tmp1;
-  double int_tmp1;
-  uint8_t err;
+  uint32_t raw = Max31855_SpiRead32(ESP32_SPI, MAXCS1);
+  Max31855Sample sample = Max31855_Decode(raw, MAX31855_FAULT_ALL);
 
-  int_tmp1 = ThermocoupleA.readInternal();
-  kiln_tmp1 = ThermocoupleA.readCelsius();
-
-  if (isnan(kiln_tmp1)) {
-    err = ThermocoupleA.readError();
-    if (err == 0 || err == MAX31855_FAULT_ALL) {
+  if (!sample.ok) {
+    if (sample.fault == 0 || sample.fault == MAX31855_FAULT_ALL) {
       DBG dbgLog(LOG_ERR, "[HEAT] MAX31855 ThermocoupleA did not respond\n");
       ABORT_Program(PR_ERR_MAX31A_NC);
       return;
     }
-    Handle_ThermocoupleA_Fault(err);
+    Handle_ThermocoupleA_Fault(sample.fault);
     return;
   }
 
-  int_temp = (int_temp + int_tmp1) / 2;
-  kiln_temp = (kiln_temp * 0.9 + kiln_tmp1 * 0.1);
+  int_temp = (int_temp + sample.internal_c) / 2;
+  kiln_temp = (kiln_temp * 0.9 + sample.tc_c * 0.1);
 
   if (TempA_errors > 0)
     TempA_errors--;
-
-  DBG dbgLog(LOG_DEBUG,
-             "[HEAT] Sensor A: Internal=%.1f Last=%.1f Avg kiln=%.1f\n", int_temp,
-             kiln_tmp1, kiln_temp);
 }
 
 void Setup_Heat() {
   pinMode(SSR1_RELAY_PIN, OUTPUT);
+  pinMode(MAXCS1, OUTPUT);
+  digitalWrite(MAXCS1, HIGH);
   SSR_On = false;
   ESP32_SPI->begin(14, 12, 13);
   if (!ThermocoupleA.begin()) {

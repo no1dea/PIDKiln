@@ -90,6 +90,7 @@ void WebHost_End() {}
 #endif
 
 #if !PK_FEATURE_LOGS
+void Setup_Logs() {}
 void Init_log_file() {}
 void Add_log_line() {}
 void Close_log_file() {}

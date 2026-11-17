@@ -341,6 +341,7 @@ void Generate_INDEX();
 void Generate_LOGS_INDEX();
 
 /* Logs / debug */
+void Setup_Logs();
 void Init_log_file();
 void Add_log_line();
 void Close_log_file();
