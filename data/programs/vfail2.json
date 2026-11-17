@@ -1,0 +1,9 @@
+{
+  "schema": "pidkiln.program/v1",
+  "name": "vfail2",
+  "description": "Invalid step — both ramp_min and rate_c_per_h",
+  "steps": [
+    { "target_c": 95, "ramp_min": 30, "hold_min": 20 },
+    { "target_c": 134, "ramp_min": 20, "rate_c_per_h": 100, "hold_min": 30 }
+  ]
+}

@@ -103,10 +103,12 @@ struct PROGRAM {
 #define MAX_PRG_LENGTH 40
 
 extern PROGRAM Program[MAX_PRG_LENGTH];
+extern uint16_t Program_rate_c_per_h[MAX_PRG_LENGTH]; /* 0 = ramp_min authored */
 extern uint8_t Program_size;
 extern String Program_desc, Program_name;
 
 extern PROGRAM *Program_run;
+extern uint16_t *Program_run_rate_c_per_h;
 extern uint8_t Program_run_size;
 extern char *Program_run_desc, *Program_run_name;
 extern time_t Program_run_start;

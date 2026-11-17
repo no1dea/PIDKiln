@@ -1,6 +1,8 @@
 #include "PIDKilnLogic.h"
 
+#include <ArduinoJson.h>
 #include <string.h>
+#include <stdlib.h>
 
 const char PIDKILN_ALLOWED_FILENAME_CHARS[] =
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890._";
@@ -8,6 +10,7 @@ const char PIDKILN_ALLOWED_FILENAME_CHARS[] =
 int PIDKiln_check_valid_chars(unsigned char a) {
   if (a == 0 || a == 9 || a == 95) return 1; // EOF, tab, _
   if (a == 10 || a == 13) return 1;          // LF, CR
+  if (a == '{' || a == '}' || a == '[' || a == ']' || a == '\\') return 1;
   if (a >= 32 && a <= 90) return 1;
   if (a >= 97 && a <= 122) return 1;
   return 0;
@@ -23,36 +26,159 @@ int PIDKiln_valid_filename(const char *file) {
   return 1;
 }
 
-int PIDKiln_parse_program_line(const char *line, uint16_t max_temp, PIDKiln_ProgramStep *out) {
-  uint16_t prg[3];
-  uint8_t pos = 2;
-  int multi = 1;
-  size_t a;
+uint16_t PIDKiln_rate_to_togo_min(int start_c, int target_c, uint16_t rate_c_per_h) {
+  if (rate_c_per_h == 0)
+    return 0;
+  if (rate_c_per_h >= PIDKILN_RATE_FULL_POWER)
+    return 1;
+  int delta = target_c - start_c;
+  if (delta < 0)
+    delta = -delta;
+  if (delta == 0)
+    return 1;
+  uint32_t num = (uint32_t)delta * 60u;
+  uint32_t mins = (num + (uint32_t)rate_c_per_h - 1u) / (uint32_t)rate_c_per_h;
+  if (mins < 1u)
+    mins = 1u;
+  if (mins > 65535u)
+    mins = 65535u;
+  return (uint16_t)mins;
+}
 
-  if (!line || !out) return 3;
+void PIDKiln_resolve_rate_step_togo(PIDKiln_ProgramStep *step, uint16_t rate_c_per_h, int start_c) {
+  if (!step || rate_c_per_h == 0)
+    return;
+  step->togo = PIDKiln_rate_to_togo_min(start_c, (int)step->temp, rate_c_per_h);
+}
 
-  a = strlen(line);
-  prg[0] = prg[1] = prg[2] = 0;
+static int copy_cstr_limited(char *dst, size_t dst_sz, const char *src) {
+  if (!dst || dst_sz == 0)
+    return 0;
+  dst[0] = '\0';
+  if (!src)
+    return 1;
+  size_t n = strlen(src);
+  if (n >= dst_sz)
+    n = dst_sz - 1;
+  memcpy(dst, src, n);
+  dst[n] = '\0';
+  return 1;
+}
 
-  while (a--) {
-    unsigned char ch = (unsigned char)line[a];
-    if (ch == '\0') continue;
-    if (ch < 48 || ch > 58) return 3; // not digit or ':'
-    if (ch == 58) {                   // ':'
-      multi = 1;
-      pos--;
-    } else {
-      prg[pos] = (uint16_t)(prg[pos] + multi * (ch - 48));
-      multi *= 10;
-    }
+static int json_int_u16(JsonVariantConst v, uint16_t *out) {
+  if (!out || v.isNull() || !v.is<int>())
+    return 0;
+  int n = v.as<int>();
+  if (n < 0 || n > 65535)
+    return 0;
+  *out = (uint16_t)n;
+  return 1;
+}
+
+int PIDKiln_parse_program_json(const char *json, size_t len, uint16_t max_temp,
+                               const int *start_temp_c, PIDKiln_ProgramParsed *out) {
+  if (!json || !out || len == 0)
+    return PIDKILN_PRG_ERR_IO;
+
+  memset(out, 0, sizeof(*out));
+
+  JsonDocument doc;
+  DeserializationError derr = deserializeJson(doc, json, len);
+  if (derr)
+    return PIDKILN_PRG_ERR_JSON;
+
+  const char *schema = doc["schema"] | (const char *)nullptr;
+  if (!schema || strcmp(schema, PIDKILN_PROGRAM_SCHEMA_V1) != 0)
+    return PIDKILN_PRG_ERR_JSON;
+
+  if (doc["name"].is<const char *>())
+    copy_cstr_limited(out->name, sizeof(out->name), doc["name"].as<const char *>());
+  if (doc["description"].is<const char *>())
+    copy_cstr_limited(out->description, sizeof(out->description),
+                      doc["description"].as<const char *>());
+  if (!out->description[0] && out->name[0])
+    copy_cstr_limited(out->description, sizeof(out->description), out->name);
+  if (!out->description[0])
+    copy_cstr_limited(out->description, sizeof(out->description), "No description");
+
+  if (!doc["assume_start_c"].isNull()) {
+    if (!doc["assume_start_c"].is<int>())
+      return PIDKILN_PRG_ERR_JSON;
+    int a = doc["assume_start_c"].as<int>();
+    if (a < 0 || a > 65535)
+      return PIDKILN_PRG_ERR_JSON;
+    out->has_assume_start = 1;
+    out->assume_start_c = (int16_t)a;
   }
 
-  if (prg[0] > max_temp) return 4;
+  JsonArrayConst steps = doc["steps"].as<JsonArrayConst>();
+  if (steps.isNull())
+    return PIDKILN_PRG_ERR_JSON;
+  size_t nsteps = steps.size();
+  if (nsteps == 0)
+    return PIDKILN_PRG_ERR_STEP;
+  if (nsteps > PIDKILN_PROGRAM_MAX_STEPS)
+    return PIDKILN_PRG_ERR_TOO_MANY;
 
-  out->temp = prg[0];
-  out->togo = prg[1];
-  out->dwell = prg[2];
-  return 0;
+  uint16_t prev_temp = 0;
+  int have_prev = 0;
+
+  for (size_t i = 0; i < nsteps; i++) {
+    JsonObjectConst step = steps[i];
+    if (step.isNull())
+      return PIDKILN_PRG_ERR_STEP;
+    if (!PIDKiln_can_add_program_step(out->size, PIDKILN_PROGRAM_MAX_STEPS))
+      return PIDKILN_PRG_ERR_TOO_MANY;
+
+    uint16_t target = 0, hold = 0, ramp_min = 0, rate = 0;
+    if (!json_int_u16(step["target_c"], &target))
+      return PIDKILN_PRG_ERR_STEP;
+    if (!json_int_u16(step["hold_min"], &hold))
+      return PIDKILN_PRG_ERR_STEP;
+    if (target > max_temp)
+      return PIDKILN_PRG_ERR_TEMP;
+
+    const bool has_ramp = !step["ramp_min"].isNull();
+    const bool has_rate = !step["rate_c_per_h"].isNull();
+    if (has_ramp == has_rate)
+      return PIDKILN_PRG_ERR_STEP; /* both or neither */
+
+    uint16_t togo = 0;
+    uint16_t stored_rate = 0;
+
+    if (has_ramp) {
+      if (!json_int_u16(step["ramp_min"], &ramp_min))
+        return PIDKILN_PRG_ERR_STEP;
+      togo = ramp_min;
+    } else {
+      if (!json_int_u16(step["rate_c_per_h"], &rate) || rate < 1)
+        return PIDKILN_PRG_ERR_STEP;
+      stored_rate = rate;
+      if (out->size == 0) {
+        if (start_temp_c) {
+          togo = PIDKiln_rate_to_togo_min(*start_temp_c, (int)target, rate);
+        } else if (out->has_assume_start) {
+          togo = PIDKiln_rate_to_togo_min((int)out->assume_start_c, (int)target, rate);
+        } else {
+          togo = 0; /* unresolved until START / measured temp */
+        }
+      } else if (have_prev) {
+        togo = PIDKiln_rate_to_togo_min((int)prev_temp, (int)target, rate);
+      } else {
+        return PIDKILN_PRG_ERR_STEP;
+      }
+    }
+
+    out->steps[out->size].temp = target;
+    out->steps[out->size].togo = togo;
+    out->steps[out->size].dwell = hold;
+    out->rate_c_per_h[out->size] = stored_rate;
+    prev_temp = target;
+    have_prev = 1;
+    out->size++;
+  }
+
+  return PIDKILN_PRG_OK;
 }
 
 int PIDKiln_inline_comment_pos(const char *line) {

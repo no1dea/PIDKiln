@@ -3,7 +3,7 @@ PIDKiln is PID temperature controller, for any task involving high temperatures 
 
 ## Key features:
 - Interface accessible both from LCD screen and WWW Webpage
-- Unlimited (limited only by storage) temperature programs number, program file size limited to 10KiB (but this is artificial limit - can be extended)
+- Unlimited (limited only by storage) temperature programs number; each program is a `pidkiln.program/v1` JSON file (≤10KiB, ≤40 steps) — see [`docs/pidkiln.program.v1.schema.json`](docs/pidkiln.program.v1.schema.json)
 - Internal ESP LittleFS storage for programs, data, logs, configuration (perhaps later SD - but I'm not sure yet)
 - Local preferences on disk, editable with Web interface
 - Online monitoring, program management, editing, graphs and kiln control
@@ -213,7 +213,7 @@ Peer to the browser UI — stable JSON, not HTML form fields. Auth: HTTP Basic (
 | `POST` | `/api/v1/run/resume` | Resume only (`409` if not paused) |
 | `POST` | `/api/v1/run/end` | End active run |
 | `POST` | `/api/v1/run/abort` | Abort + user-abort error |
-| `POST` | `/api/v1/programs/load` | Body `{"name":"program1.txt"}` |
+| `POST` | `/api/v1/programs/load` | Body `{"name":"program1.json"}` |
 
 `GET /api/v1/status` fields: `kiln_c`, `set_c`, `case_c`, `int_c`, `state`, `error`, `step`, `steps`, `heat_pct`, `ramp_cps`; optional `run_name`, `start_ts`, `eta_ts` when a run is loaded.
 
@@ -231,7 +231,7 @@ curl -u admin:hotashell http://<ip>/api/v1/status
 curl -u admin:hotashell -X POST http://<ip>/api/v1/run/pause
 curl -u admin:hotashell -X POST http://<ip>/api/v1/run/resume
 curl -u admin:hotashell -H "Content-Type: application/json" \
-  -d "{\"name\":\"program1.txt\"}" http://<ip>/api/v1/programs/load
+  -d "{\"name\":\"program1.json\"}" http://<ip>/api/v1/programs/load
 ```
 
 Build checks: `pio run -e esp32-wrover` (HTTP+API) and `pio run -e esp32-wrover-api` (API only).

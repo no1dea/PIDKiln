@@ -29,34 +29,10 @@ void IRAM_ATTR onTimer(){
 }
 
 
-// Load program from disk to memory - validate it
-//
-byte add_program_line(String& linia){
-  // Looking for line dddd:dddd:dddd (temperature:time in minutes:time in minutes) - assume max 1350:9999:9999
-  PIDKiln_ProgramStep step;
-  if(!PIDKiln_can_add_program_step(Program_size, MAX_PRG_LENGTH)){
-    DBG dbgLog(LOG_ERR,"[PRG] Program too long (max %d steps)\n",MAX_PRG_LENGTH);
-    return 5;
-  }
-  DBG dbgLog(LOG_DEBUG,"[PRG] Sanitizing line: '%s'\n",linia.c_str());
-  int err = PIDKiln_parse_program_line(linia.c_str(), Prefs[PRF_MAX_TEMP].value.uint16, &step);
-  if(err) return (byte)err;
-  Program[Program_size].temp=step.temp;
-  Program[Program_size].togo=step.togo;
-  Program[Program_size].dwell=step.dwell;
-  DBG dbgLog(LOG_DEBUG,"[PRG] Program_pos: %d, Temp: %dC Time to: %ds Dwell: %ds\n",Program_size,Program[Program_size].temp,Program[Program_size].togo,Program[Program_size].dwell);
-  Program_size++;
-  return 0;
-}
-
-
 // Load program from file to memory - return 0 if success
 //
 uint8_t Load_program(char *file){
-String line;
 char file_path[32];
-uint8_t err=0;
-uint16_t pos=0;
 int sel;
 File prg;
 
@@ -65,49 +41,52 @@ File prg;
     DBG dbgLog(LOG_DEBUG,"[PRG] Got pointer to load:'%s'\n",file);
     Program_name=String(file);
   }else{
-    if((sel=Find_selected_program())<0) return Cleanup_program(1);
+    if((sel=Find_selected_program())<0) return Cleanup_program(PIDKILN_PRG_ERR_IO);
     sprintf(file_path,"%s/%s",PRG_Directory,Programs_DIR[sel].filename);
     Program_name=String(Programs_DIR[sel].filename);
   }
   DBG dbgLog(LOG_INFO,"[PRG] Load program name: '%s'\n",file_path);
-  
-  if(prg = LittleFS.open(file_path,"r")){
-    Program_desc="";  // erase current program
-    Program_size=0;
-    while(prg.available()){
-      line=prg.readStringUntil('\n');
-      line.trim();
-      if(!line.length()) continue; // empty line - skip it
-      
-      DBG dbgLog(LOG_DEBUG,"[PRG] Raw line: '%s'\n",line.c_str());
-      if(line.startsWith("#")){ // skip every comment line
-        DBG dbgLog(LOG_DEBUG,"[PRG]  comment");
-        if(!Program_desc.length()){
-          line=line.substring(1);  // If it's the first line with comment - copy it without trailing #
-          line.trim();
-          Program_desc=line;
-        }
-      }else{
-        // Sanitize every line - if it's have a comment - strip ip, then check if this are only numbers and ":" - otherwise fail
-        {
-          int cpos=PIDKiln_inline_comment_pos(line.c_str());
-          if(cpos>=0){
-            line=line.substring(0,(unsigned)cpos);
-            line.trim();
-          }
-        }
-        
-        if(line.length()>15) return Cleanup_program(2);  // program line too long
-        else if(err=add_program_line(line)) return Cleanup_program(err); // line adding failed!!
-        
-        DBG dbgLog(LOG_DEBUG,"[PRG] San line: '%s'\n",line.c_str());
-      }
-    }
-    DBG dbgLog(LOG_DEBUG,"[PRG] Found description: %s\n",Program_desc.c_str());
-    if(!Program_desc.length()) Program_desc="No description";   // if after reading file program still has no description - add it
-    
-    return 0;
-  }return Cleanup_program(1);
+
+  prg = LittleFS.open(file_path,"r");
+  if(!prg) return Cleanup_program(PIDKILN_PRG_ERR_IO);
+
+  size_t fsize = prg.size();
+  if(fsize == 0 || fsize > (size_t)MAX_Prog_File_Size){
+    prg.close();
+    return Cleanup_program(PIDKILN_PRG_ERR_IO);
+  }
+
+  char *buf = (char *)MALLOC(fsize + 1);
+  if(!buf){
+    prg.close();
+    return Cleanup_program(PIDKILN_PRG_ERR_IO);
+  }
+  size_t got = prg.readBytes(buf, fsize);
+  prg.close();
+  buf[got] = '\0';
+
+  PIDKiln_ProgramParsed parsed;
+  int start_c = (int)kiln_temp;
+  int err = PIDKiln_parse_program_json(buf, got, Prefs[PRF_MAX_TEMP].value.uint16, &start_c, &parsed);
+  free(buf);
+  if(err) return Cleanup_program((uint8_t)err);
+
+  Program_size = 0;
+  Program_desc = String(parsed.description);
+  for(unsigned a = 0; a < parsed.size; a++){
+    Program[a].temp = parsed.steps[a].temp;
+    Program[a].togo = parsed.steps[a].togo;
+    Program[a].dwell = parsed.steps[a].dwell;
+    Program_rate_c_per_h[a] = parsed.rate_c_per_h[a];
+    DBG dbgLog(LOG_DEBUG,"[PRG] Step %u: Temp:%uC togo:%u dwell:%u rate:%u\n",
+               a, Program[a].temp, Program[a].togo, Program[a].dwell, Program_rate_c_per_h[a]);
+  }
+  Program_size = (uint8_t)parsed.size;
+  for(unsigned a = parsed.size; a < MAX_PRG_LENGTH; a++)
+    Program_rate_c_per_h[a] = 0;
+
+  DBG dbgLog(LOG_DEBUG,"[PRG] Found description: %s\n",Program_desc.c_str());
+  return PIDKILN_PRG_OK;
 }
 
 
@@ -181,21 +160,29 @@ void Update_program_step(uint8_t sstep, uint16_t stemp, uint16_t stime, uint16_t
     if(Program_run_size==sstep){ // we are out of the program - but this is just NEXT step, we can add
       Program_run_size++;
       Program_run=(PROGRAM *)REALLOC(Program_run,sizeof(PROGRAM)*Program_run_size);
+      Program_run_rate_c_per_h=(uint16_t *)REALLOC(Program_run_rate_c_per_h,sizeof(uint16_t)*Program_run_size);
+      if(Program_run_rate_c_per_h) Program_run_rate_c_per_h[sstep]=0;
     }else return;   // we are out of the program - we can edit it
 
   Program_run[sstep].temp=stemp;
   Program_run[sstep].togo=stime;
   Program_run[sstep].dwell=sdwell;
+  if(Program_run_rate_c_per_h && sstep<Program_run_size)
+    Program_run_rate_c_per_h[sstep]=0; /* LCD/quick edits are duration-based */
 }
 
 
 // Initizalize program - clear memory
 //
 void Initialize_program_to_run(){
-  if(!Program_run_size) return;
+  if(!Program_run_size && !Program_run && !Program_run_rate_c_per_h) return;
   if(Program_run!=NULL){
     free(Program_run);
     Program_run=NULL;
+  }
+  if(Program_run_rate_c_per_h!=NULL){
+    free(Program_run_rate_c_per_h);
+    Program_run_rate_c_per_h=NULL;
   }
   if(Program_run_desc!=NULL){
     free(Program_run_desc);
@@ -216,7 +203,11 @@ void Load_program_to_run(){
   
   Initialize_program_to_run();
   Program_run=(PROGRAM *)MALLOC(sizeof(PROGRAM)*Program_size);
-  for(uint8_t a=0;a<Program_size;a++) Program_run[a]=Program[a];
+  Program_run_rate_c_per_h=(uint16_t *)MALLOC(sizeof(uint16_t)*Program_size);
+  for(uint8_t a=0;a<Program_size;a++){
+    Program_run[a]=Program[a];
+    Program_run_rate_c_per_h[a]=Program_rate_c_per_h[a];
+  }
   
   Program_run_desc=(char *)MALLOC((Program_desc.length()+1)*sizeof(char));
   strcpy(Program_run_desc,Program_desc.c_str());
@@ -262,7 +253,10 @@ byte Cleanup_program(byte err){
   Program_size=0;
   Program_desc="";
   Program_name="";
-  for(byte a=0;a<MAX_PRG_LENGTH;a++) Program[a].temp=Program[a].togo=Program[a].dwell=0;
+  for(byte a=0;a<MAX_PRG_LENGTH;a++){
+    Program[a].temp=Program[a].togo=Program[a].dwell=0;
+    Program_rate_c_per_h[a]=0;
+  }
   DBG dbgLog(LOG_INFO,"[PRG] Cleaning up program with error %d\n",err);
   return err;
 }
@@ -436,6 +430,15 @@ void START_Program(){
   Energy_Usage=0;
   Program_error=0;
   TempA_errors=TempB_errors=0;  // Reset temperature errors
+
+  /* Rate-authored step 0: resolve togo from live kiln temperature. */
+  if(Program_run && Program_run_size && Program_run_rate_c_per_h && Program_run_rate_c_per_h[0]){
+    PIDKiln_ProgramStep s0 = {Program_run[0].temp, Program_run[0].togo, Program_run[0].dwell};
+    PIDKiln_resolve_rate_step_togo(&s0, Program_run_rate_c_per_h[0], (int)kiln_temp);
+    Program_run[0].togo = s0.togo;
+    DBG dbgLog(LOG_INFO,"[PRG] Step0 rate %u C/h → togo %u min (from %.1fC)\n",
+               Program_run_rate_c_per_h[0], Program_run[0].togo, kiln_temp);
+  }
   
   Enable_EMR();
 

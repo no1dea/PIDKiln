@@ -1,0 +1,11 @@
+{
+  "schema": "pidkiln.program/v1",
+  "name": "program2",
+  "description": "Second program short description",
+  "steps": [
+    { "target_c": 10, "ramp_min": 20, "hold_min": 200 },
+    { "target_c": 99, "ramp_min": 30, "hold_min": 100 },
+    { "target_c": 1340, "ramp_min": 200, "hold_min": 10 },
+    { "target_c": 700, "ramp_min": 120, "hold_min": 100 }
+  ]
+}

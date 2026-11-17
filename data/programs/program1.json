@@ -1,0 +1,14 @@
+{
+  "schema": "pidkiln.program/v1",
+  "name": "program1",
+  "description": "Short, clear description of the program.",
+  "steps": [
+    { "target_c": 95, "ramp_min": 30, "hold_min": 20 },
+    { "target_c": 134, "rate_c_per_h": 117, "hold_min": 30 },
+    { "target_c": 97, "ramp_min": 80, "hold_min": 30 },
+    { "target_c": 360, "ramp_min": 180, "hold_min": 20 },
+    { "target_c": 600, "ramp_min": 100, "hold_min": 30 },
+    { "target_c": 970, "ramp_min": 120, "hold_min": 50 },
+    { "target_c": 600, "ramp_min": 90, "hold_min": 0 }
+  ]
+}

@@ -35,10 +35,12 @@ const uint8_t SCR_MENU_SPACE = 2;
 const uint8_t SCR_MENU_MIDDLE = 3;
 
 PROGRAM Program[MAX_PRG_LENGTH];
+uint16_t Program_rate_c_per_h[MAX_PRG_LENGTH];
 uint8_t Program_size = 0;
 String Program_desc, Program_name;
 
 PROGRAM *Program_run = nullptr;
+uint16_t *Program_run_rate_c_per_h = nullptr;
 uint8_t Program_run_size = 0;
 char *Program_run_desc = NULL, *Program_run_name = NULL;
 time_t Program_run_start = 0;

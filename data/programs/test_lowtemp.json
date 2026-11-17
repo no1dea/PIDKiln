@@ -1,0 +1,14 @@
+{
+  "schema": "pidkiln.program/v1",
+  "name": "test_lowtemp",
+  "description": "Program to test low temperatures",
+  "steps": [
+    { "target_c": 35, "ramp_min": 10, "hold_min": 5 },
+    { "target_c": 44, "ramp_min": 5, "hold_min": 10 },
+    { "target_c": 55, "ramp_min": 10, "hold_min": 10 },
+    { "target_c": 60, "ramp_min": 10, "hold_min": 5 },
+    { "target_c": 45, "ramp_min": 15, "hold_min": 0 },
+    { "target_c": 30, "ramp_min": 5, "hold_min": 5 },
+    { "target_c": 50, "ramp_min": 10, "hold_min": 0 }
+  ]
+}

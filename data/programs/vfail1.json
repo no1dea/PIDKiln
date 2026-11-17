@@ -1,0 +1,11 @@
+{
+  "schema": "pidkiln.program/v1",
+  "name": "vfail1",
+  "description": "Short description of fail1 — target above max temp",
+  "steps": [
+    { "target_c": 95, "ramp_min": 100, "hold_min": 120 },
+    { "target_c": 134, "ramp_min": 20, "hold_min": 30 },
+    { "target_c": 1360, "ramp_min": 180, "hold_min": 120 },
+    { "target_c": 600, "ramp_min": 200, "hold_min": 30 }
+  ]
+}

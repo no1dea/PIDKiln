@@ -1,0 +1,10 @@
+{
+  "schema": "pidkiln.program/v1",
+  "name": "test_up_down",
+  "description": "Program to test up and down temp. change",
+  "assume_start_c": 25,
+  "steps": [
+    { "target_c": 45, "rate_c_per_h": 240, "hold_min": 5 },
+    { "target_c": 30, "rate_c_per_h": 180, "hold_min": 5 }
+  ]
+}
