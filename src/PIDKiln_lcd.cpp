@@ -1,16 +1,13 @@
-/*
-** LCD Display components
-**
-*/
 #include <U8g2lib.h>
-
-
 #ifdef U8X8_HAVE_HW_SPI
 #include <SPI.h>
 #endif
 #ifdef U8X8_HAVE_HW_I2C
 #include <Wire.h>
 #endif
+#include <WiFi.h>
+#include <LittleFS.h>
+#include "PIDKiln.h"
 
 #define FONT4 u8g2_font_p01type_tr
 #define FONT5 u8g2_font_micro_tr
@@ -134,7 +131,7 @@ char rest[MAX_CHARS_PL];
 
 // Third main view - operations (start,pause,stop)
 //
-void LCD_display_mainv3(int dir=0, byte ctrl=0){
+void LCD_display_mainv3(int dir, byte ctrl){
 char msg[MAX_CHARS_PL];
 uint16_t chh,chw,x=2,y=2;
 static int what=0;
@@ -486,7 +483,7 @@ char msg[MAX_CHARS_PL];
 
 // Display question if delete program
 //
-void LCD_Display_program_delete(int dir=0, boolean pressed=0){
+void LCD_Display_program_delete(int dir, boolean pressed){
 uint16_t x,y,h;
 uint8_t chh,half;
 static boolean yes=false;
@@ -551,7 +548,7 @@ static boolean yes=false;
 
 // Display full program, step by step
 //
-void LCD_Display_program_full(int dir=0){
+void LCD_Display_program_full(int dir){
 uint8_t x=4,y=3,chh,lines;
 static uint8_t pos=0;
 char msg[MAX_CHARS_PL];
@@ -586,7 +583,7 @@ char msg[MAX_CHARS_PL];
 // Display single program info and options
 // Dir - if dial rotated, load_prg - 0 = yes (if first time showing program (from program list)), 1 = no (rotating encoder), 2 = encoder pressed
 //
-void LCD_Display_program_summary(int dir,byte load_prg){
+void LCD_Display_program_summary(int dir, byte load_prg){
 static int prog_menu=0;
 char file_path[32];
 uint8_t x=2,y=1,chh,err=0;
@@ -881,7 +878,7 @@ struct tm timeinfo;
 
 // Display currently loaded preferences on LCD screen
 //
-void LCD_Display_prefs(int dir=0){
+void LCD_Display_prefs(int dir){
 uint8_t x=4,y=3,chh,chw,lines;
 static uint8_t pos=1;
 char msg[MAX_CHARS_PL*2],rest[MAX_CHARS_PL];
@@ -939,7 +936,7 @@ void LCD_Display_about(){
 
 // Restart the ESP device
 //
-void Restart_ESP(){
+static void LCD_Restart_ESP(){
   u8g2.clearBuffer();
   u8g2.setFont(FONT8);
   u8g2.drawStr(25,30,PVer);
@@ -948,7 +945,7 @@ void Restart_ESP(){
   u8g2.drawFrame(0,0,SCREEN_W,SCREEN_H);
   u8g2.sendBuffer();
   delay(1000);
-  ESP.restart();
+  Restart_ESP();
 }
 
 

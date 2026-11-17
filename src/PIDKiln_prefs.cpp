@@ -1,3 +1,5 @@
+#include <LittleFS.h>
+#include "PIDKiln.h"
 /*
 ** Preferences read/write routines
 **

@@ -1,12 +1,19 @@
-/*
-** HTTP functions
-**
-*/
+#include <ESPAsyncWebServer.h>
+#include <WiFi.h>
+#include <LittleFS.h>
 #include <soc/efuse_reg.h>
 #include <Esp.h>
-#include <ESPAsyncWebServer.h>
-#include <U8g2lib.h>
 #include <Update.h>
+#include "PIDKiln.h"
+#if PK_FEATURE_LOCAL_UI
+#include <U8g2lib.h>
+extern U8G2_ST7920_128X64_F_HW_SPI u8g2;
+#endif
+
+boolean delete_file(File &newFile);
+boolean check_valid_chars(byte a);
+boolean valid_filename(char *file);
+static bool _webAuth(AsyncWebServerRequest *request);
 
 // Other variables
 //
@@ -192,20 +199,6 @@ String Debug_ESP32(const String& var){
  else return String();
  
  DBG return String();
-}
-
-
-// Refresh in-memory program list (indexes are generated dynamically over HTTP).
-//
-void Generate_INDEX(){
-  Load_programs_dir();
-}
-
-
-// Refresh in-memory logs list (indexes are generated dynamically over HTTP).
-//
-void Generate_LOGS_INDEX(){
-  Load_LOGS_Dir();
 }
 
 
@@ -637,6 +630,7 @@ Kiln_ReadTelemetry(&telem);
 // Function(s) writing LCD screenshot over WWW - not perfect - but working
 //
 char *screenshot;
+#if PK_FEATURE_LOCAL_UI
 void out(const char *s){strcat(screenshot,s);}
 void do_screenshot(AsyncWebServerRequest *request){
 
@@ -647,7 +641,6 @@ void do_screenshot(AsyncWebServerRequest *request){
     return;
   }
   *screenshot='\0';
-  //strcpy(screenshot,"");
 
   AsyncResponseStream *response = request->beginResponseStream("image/x-portable-bitmap");
   response->addHeader("Server","ESP Async Web Server");
@@ -659,6 +652,7 @@ void do_screenshot(AsyncWebServerRequest *request){
   
   request->send(response);
 }
+#endif
 
 
 // Funnctin handling firmware upload/update (from https://github.com/lbernstone/asyncUpdate/blob/master/AsyncUpdate.ino)
@@ -702,7 +696,7 @@ size_t content_len;
 
 // Basic WEB authentication
 //
-bool _webAuth(AsyncWebServerRequest *request){
+static bool _webAuth(AsyncWebServerRequest *request){
     if(!request->authenticate(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str,NULL,false)) {
       request->requestAuthentication(NULL,false); // force basic auth
       return false;
@@ -799,7 +793,9 @@ void SETUP_WebServer(void) {
 
   server.on("/load.html", HTTP_GET, GET_Handle_Load);
 
+#if PK_FEATURE_LOCAL_UI
   server.on("/screenshot.html", HTTP_GET, do_screenshot);
+#endif
 
   server.on("/about.html", HTTP_GET, [](AsyncWebServerRequest *request){
     if(!_webAuth(request)) return;

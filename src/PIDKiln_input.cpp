@@ -1,3 +1,4 @@
+#include "PIDKiln.h"
 /*
 ** Pidkiln input (rotary encoder, buttons) subsystem
 **

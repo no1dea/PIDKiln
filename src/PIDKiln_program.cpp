@@ -1,10 +1,9 @@
-/*
-** Pidkiln program routines - main program functions and all PID magic
-**
-*/
+#include <Arduino.h>
 #include <PID_v1.h>
 #include <SPI.h>
+#include <LittleFS.h>
 #include <PIDKilnLogic.h>
+#include "PIDKiln.h"
 
 // Other variables
 //
@@ -327,20 +326,19 @@ void RESUME_Program(){
 
 // Recalculate ETA based on current step
 //
-void Program_recalculate_ETA(boolean dwell=false){
-
-  Program_run_end=time(NULL);
-  for(uint16_t a=Program_run_step; a<Program_run_size;a++){
-    if(!dwell) Program_run_end+=Program_run[a].togo*60;
-    else dwell=false;   // If we start counting with dwell=true - next step shoud start as a normal step, so dwell=fasle;
-    Program_run_end+=Program_run[a].dwell*60;
+void Program_recalculate_ETA(boolean dwell){
+  Program_run_end = time(NULL);
+  if (Program_run && Program_run_step >= 0) {
+    Program_run_end += PIDKiln_eta_remaining_seconds(
+        (const PIDKiln_ProgramStep *)Program_run, (unsigned)Program_run_step,
+        Program_run_size, dwell ? 1 : 0);
   }
 }
 
 
 // This is functional called every second - if program is running. It calculates temperature grow, sets targets etc.
 //
-void Program_calculate_steps(boolean prg_start=false){
+void Program_calculate_steps(boolean prg_start){
 static time_t step_start,next_step_end;
 static uint16_t cnt1=1,cnt2=1;
 static boolean is_it_dwell=false;
@@ -465,22 +463,24 @@ void SAFETY_Check(){
   static time_t runaway_start=0;
   static double runaway_temp0=0;
 
-  if(kiln_temp<Prefs[PRF_MIN_TEMP].value.uint8){
+  if(PIDKiln_temp_below_min(kiln_temp, Prefs[PRF_MIN_TEMP].value.uint8)){
     DBG dbgLog(LOG_ERR,"[PRG] Safety check failed - MIN temperature < %d\n",Prefs[PRF_MIN_TEMP].value.uint8);
     ABORT_Program(PR_ERR_TOO_COLD);
-  }else if(kiln_temp>Prefs[PRF_MAX_TEMP].value.uint16){
+  }else if(PIDKiln_temp_above_max(kiln_temp, Prefs[PRF_MAX_TEMP].value.uint16)){
     DBG dbgLog(LOG_ERR,"[PRG] Safety check failed - MAX temperature > %d\n",Prefs[PRF_MAX_TEMP].value.uint16);
     ABORT_Program(PR_ERR_TOO_HOT);  
   }
-  if(case_temp>Prefs[PRF_MAX_HOUSING_TEMP].value.uint16){
+#if PK_FEATURE_HOUSING_TC
+  if(PIDKiln_housing_above_max(case_temp, Prefs[PRF_MAX_HOUSING_TEMP].value.uint16)){
     DBG dbgLog(LOG_ERR,"[PRG] Safety check failed - MAX housing temperature > %d\n",Prefs[PRF_MAX_HOUSING_TEMP].value.uint16);
     ABORT_Program(PR_ERR_TOO_HOT_HOUSING);
   }
+#endif
 
   // Thermal runaway: while ramping up and setpoint is 5C+ above kiln temp, require +5C rise within N minutes.
   // Pref units are minutes; 0 disables. Matches data/etc/pidkiln.conf comments.
   uint16_t run_win=Prefs[PRF_THERMAL_RUN].value.uint16;
-  boolean heating_up=(temp_incr>0.0f) && (set_temp>=(kiln_temp+5.0));
+  boolean heating_up=PIDKiln_thermal_runaway_heating(temp_incr, set_temp, kiln_temp);
   if(!run_win || Program_run_state!=PR_RUNNING || !heating_up){
     runaway_watch=false;
   }else if(!runaway_watch){
@@ -527,18 +527,20 @@ uint32_t now;
       //
       if(cnt1>9) cnt1=0;
       else cnt1++;
-#ifdef MAXCS2
+#if PK_FEATURE_HOUSING_TC
       if(cnt1==3){  // just to make it in other time then next if cnt1
         Update_TemperatureB();      // this does not have to be updated so often as kiln temp
       }
 #endif
-#ifdef ENERGY_MON_PIN
+#if PK_FEATURE_ENERGY
       if(cnt1==4){
         Read_Energy_INPUT();
       }
 #endif
       // Do Main view screen refreshing if there is a program and if it's running
+      #if PK_FEATURE_LOCAL_UI
       if(LCD_State==SCR_MAIN_VIEW && Program_run_size && LCD_Main==MAIN_VIEW1) LCD_display_mainv1();
+#endif
 
       if(Program_run_state==PR_RUNNING || Program_run_state==PR_PAUSED || Program_run_state==PR_THRESHOLD){
         // Do all the program recalc
@@ -548,7 +550,9 @@ uint32_t now;
           SAFETY_Check();
         }else if(cnt1==9){
           cnt1=0;
+          #if PK_FEATURE_LOCAL_UI
           if(LCD_Main==MAIN_VIEW2 && (Program_run_state==PR_RUNNING || Program_run_state==PR_PAUSED)) LCD_display_mainv2();
+#endif
           DBG dbgLog(LOG_INFO,"[PRG] Pid_out RAW:%.2f Pid_out:%.2f Now-window:%d WindowSize:%d Prg_state:%d\n",pid_out,pid_out*PID_WINDOW_DIVIDER,(now - windowStartTime), Prefs[PRF_PID_WINDOW].value.uint16, (byte)Program_run_state);
         }
        }

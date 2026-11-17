@@ -65,3 +65,35 @@ int PIDKiln_inline_comment_pos(const char *line) {
 int PIDKiln_can_add_program_step(unsigned size, unsigned max_steps) {
   return (size < max_steps) ? 1 : 0;
 }
+
+int PIDKiln_temp_below_min(double kiln_temp, uint8_t min_temp) {
+  return (kiln_temp < (double)min_temp) ? 1 : 0;
+}
+
+int PIDKiln_temp_above_max(double kiln_temp, uint16_t max_temp) {
+  return (kiln_temp > (double)max_temp) ? 1 : 0;
+}
+
+int PIDKiln_housing_above_max(double case_temp, uint16_t max_housing) {
+  return (case_temp > (double)max_housing) ? 1 : 0;
+}
+
+int PIDKiln_thermal_runaway_heating(float temp_incr, double set_temp, double kiln_temp) {
+  return (temp_incr > 0.0f && set_temp >= (kiln_temp + 5.0)) ? 1 : 0;
+}
+
+uint32_t PIDKiln_eta_remaining_seconds(const PIDKiln_ProgramStep *steps, unsigned run_step,
+                                       unsigned run_size, int dwell_only) {
+  uint32_t sec = 0;
+  int skip_togo = dwell_only ? 1 : 0;
+  if (!steps || run_step >= run_size)
+    return 0;
+  for (unsigned a = run_step; a < run_size; a++) {
+    if (!skip_togo)
+      sec += (uint32_t)steps[a].togo * 60u;
+    else
+      skip_togo = 0;
+    sec += (uint32_t)steps[a].dwell * 60u;
+  }
+  return sec;
+}

@@ -3,9 +3,7 @@
 */
 #include <Arduino.h>
 #include <FS.h>
-#include <WiFiUdp.h>
 #include <PID_v1.h>
-#include <Syslog.h>
 #include "PIDKiln.h"
 
 const uint16_t Long_Press = 400;
@@ -78,10 +76,12 @@ struct PrefsStruct Prefs[PRF_end];
 File CSVFile, LOGFile;
 
 const char *PVer = "PIDKiln v1.6";
-const char *PDate = "2026.11.16";
+const char *PDate = "2026.11.17";
 
+#if PK_FEATURE_SYSLOG
 WiFiUDP udpClient;
 Syslog syslog(udpClient, SYSLOG_PROTO_IETF);
+#endif
 
 static portMUX_TYPE s_telem_mux = portMUX_INITIALIZER_UNLOCKED;
 static KilnTelemetry s_telem = {};
@@ -98,7 +98,8 @@ void Kiln_PublishTelemetry() {
 }
 
 void Kiln_ReadTelemetry(KilnTelemetry *out) {
-  if (!out) return;
+  if (!out)
+    return;
   portENTER_CRITICAL(&s_telem_mux);
   *out = s_telem;
   portEXIT_CRITICAL(&s_telem_mux);

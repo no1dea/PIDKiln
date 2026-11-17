@@ -32,6 +32,17 @@ int PIDKiln_inline_comment_pos(const char *line);
 /* 1 if another program step may be stored, 0 if at capacity. */
 int PIDKiln_can_add_program_step(unsigned size, unsigned max_steps);
 
+/* Safety predicates (pure; used by firmware SAFETY_Check and host tests). */
+int PIDKiln_temp_below_min(double kiln_temp, uint8_t min_temp);
+int PIDKiln_temp_above_max(double kiln_temp, uint16_t max_temp);
+int PIDKiln_housing_above_max(double case_temp, uint16_t max_housing);
+/* 1 when ramping up with setpoint at least 5C above kiln temp. */
+int PIDKiln_thermal_runaway_heating(float temp_incr, double set_temp, double kiln_temp);
+
+/* ETA: seconds to add for remaining steps from run_step (dwell_only skips first togo). */
+uint32_t PIDKiln_eta_remaining_seconds(const PIDKiln_ProgramStep *steps, unsigned run_step,
+                                       unsigned run_size, int dwell_only);
+
 #ifdef __cplusplus
 }
 #endif

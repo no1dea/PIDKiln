@@ -55,7 +55,7 @@ static void test_parse_program_line_errors(void) {
 
 static void test_inline_comment_pos(void) {
   TEST_ASSERT_EQUAL_INT(0, PIDKiln_inline_comment_pos("# full line comment"));
-  TEST_ASSERT_EQUAL_INT(8, PIDKiln_inline_comment_pos("95:30:20 # dwell"));
+  TEST_ASSERT_EQUAL_INT(9, PIDKiln_inline_comment_pos("95:30:20 # dwell"));
   TEST_ASSERT_EQUAL_INT(-1, PIDKiln_inline_comment_pos("95:30:20"));
 }
 

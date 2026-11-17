@@ -1,0 +1,19 @@
+name: Native unit tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  unity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PlatformIO
+        run: pip install -U platformio
+      - name: Run Unity suites
+        run: pio test -e native

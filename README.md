@@ -171,13 +171,28 @@ This is the short version — for hardware assembly see the [Wiki](https://githu
 2. Install [PlatformIO Core](https://platformio.org/install/cli) (or the VS Code / Cursor PlatformIO extension).
 3. Clone this repository and open it as the PlatformIO project root.
 4. Edit [`data/etc/pidkiln.conf`](data/etc/pidkiln.conf) for WiFi credentials and preferences.
-5. Build and flash firmware (Wrover / PSRAM default env):
+5. Build and flash firmware (Wrover / PSRAM default env = full kit):
    - `pio run -e esp32-wrover`
    - `pio run -e esp32-wrover -t upload`
 6. Upload the LittleFS image from `data/`:
    - `pio run -e esp32-wrover -t uploadfs`
 7. For boards without PSRAM use `-e esp32-wroom` instead.
 8. For production use `-e esp32-wrover-release` (`DEBUG=0`, less flash).
+
+### Compile-time feature packs
+
+Optional hardware and I/O stacks are selected by **PlatformIO env**, not by commenting pin `#define`s. Flags live in [`include/PIDKiln_features.h`](include/PIDKiln_features.h) (every `PK_FEATURE_*` must be `0` or `1`; illegal combos fail at compile time). Unused `.cpp` modules are dropped via `build_src_filter`.
+
+| Env | What you get |
+|-----|----------------|
+| `esp32-wrover` / `esp32-wrover-release` / `esp32-wroom` | Full kit: LCD+encoder, WiFi, HTTP, logs, EMR, alarm, housing TC, syslog |
+| `esp32-wrover-web` | Headless web controller (no LCD/encoder / no U8g2) |
+| `esp32-wrover-local` | LCD+encoder + kiln extras, no WiFi/HTTP/syslog |
+| `esp32-wrover-core` | Minimal: prefs, FS, PID/program, MAX31855-A, SSR1 only |
+
+SSR2 and energy meter are off in the named envs; enable `-DPK_FEATURE_SSR2=1` / `-DPK_FEATURE_ENERGY=1` and include the matching sources/libs if those peripherals are wired.
+
+Firmware sources: sole sketch [`src/PIDKiln.ino`](src/PIDKiln.ino); modules are `src/PIDKiln_*.cpp` (heat, lcd, input, http, net, logs, emr, alarm, housing_tc, …). Pure logic for host tests lives in [`lib/PIDKilnLogic`](lib/PIDKilnLogic).
 
 **Local JS/CSS:** static assets under `data/js` and `data/css` are precompressed (`.gz`) for ESPAsyncWebServer. Large Chart/jQuery libs ship as `.gz` only. After bumping those libs, place the new uncompressed files in `data/js/` and run `scripts/compress_webassets.ps1`.
 
@@ -211,11 +226,17 @@ Then start **Wokwi: Start Simulator** in the VS Code/Cursor extension (needs [`d
 
 Useful in Wokwi: boot, WiFi/AP (limited), web UI, FreeRTOS tasks, Serial logs, basic GPIO. Thermocouple / LCD / SSR hardware is not fully simulated.
 
-If a host C/C++ compiler is on `PATH` (e.g. MinGW on Windows):
+**Host unit tests (Unity / `[env:native]`):** requires a host C++ toolchain on `PATH` (MinGW-w64 or LLVM on Windows; `g++` on Linux/macOS). Suites:
+
+- `test/test_logic` — filenames, program-line parse, comments
+- `test/test_safety` — temp / housing / runaway predicates
+- `test/test_program` — ETA and step-capacity helpers
 
 ```
 pio test -e native
 ```
+
+CI runs the same command on Linux (`.github/workflows/native-tests.yml`).
 
 ### Legacy Arduino IDE notes
 

@@ -1,3 +1,5 @@
+#include <WiFi.h>
+#include "PIDKiln.h"
 /*
 ** Network related functions
 **
@@ -17,49 +19,6 @@ struct tm timeinfo;
     return;
   }
   Serial.println(&timeinfo, "%A, %B %d %Y %H:%M:%S");
-}
-
-
-// Set some default time - if there is no NTP
-//
-void Setup_start_date(){
-struct timeval tv;
-struct tm mytm;
-uint8_t pos;
-char *tmp,msg[20];
-
-  strcpy(msg,Prefs[PRF_INIT_DATE].value.str);
-  tmp=strtok(msg,".-:");
-  DBG dbgLog(LOG_INFO,"[NET] Y:%s ",tmp);
-  mytm.tm_year = atoi(tmp)-1900;  // year after 1900
-  
-  tmp=strtok(NULL,".-:");
-  DBG dbgLog(LOG_INFO,"[NET] M:%s ",tmp);
-  mytm.tm_mon = atoi(tmp)-1;        //0-11 WHY???
-  
-  tmp=strtok(NULL,".-:");
-  DBG dbgLog(LOG_INFO,"[NET] D:%s ",tmp);
-  mytm.tm_mday = atoi(tmp);       //1-31 - depending on month
-
-  strcpy(msg,Prefs[PRF_INIT_TIME].value.str);
-  tmp=strtok(msg,".-:");
-  DBG dbgLog(LOG_INFO,"[NET] H:%s ",tmp);
-  mytm.tm_hour = atoi(tmp);       //0-23
-
-  tmp=strtok(NULL,".-:");
-  DBG dbgLog(LOG_INFO,"[NET] m:%s ",tmp);
-  mytm.tm_min = atoi(tmp);        //0-59
-
-  tmp=strtok(NULL,".-:");
-  DBG dbgLog(LOG_INFO,"[NET] s:%s\n",tmp);
-  mytm.tm_sec = atoi(tmp);        //0-59
-  
-  time_t t = mktime(&mytm);
-
-  tv.tv_sec = t;
-  tv.tv_usec = 0;
-
-  settimeofday(&tv, NULL);
 }
 
 

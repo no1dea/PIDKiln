@@ -1,3 +1,5 @@
+#include <LittleFS.h>
+#include "PIDKiln.h"
 /*
 ** Logging functionality
 **
@@ -19,7 +21,7 @@ struct tm timeinfo, *tmm;
   
   if(CSVFile=LittleFS.open(str, "w")){
     DBG dbgLog(LOG_INFO,"[LOG] Created new log file %s\n",str);
-#ifdef ENERGY_MON_PIN
+#if PK_FEATURE_ENERGY
     CSVFile.print(String("Date,Temperature,Housing,Energy"));
 #else
     CSVFile.print(String("Date,Temperature,Housing"));
@@ -70,7 +72,7 @@ struct tm timeinfo,*tmm;
   if(getLocalTime(&timeinfo)) strftime(str, 29, "%F %T", &timeinfo);
   else sprintf(str,"%d",millis());
 
-#ifdef ENERGY_MON_PIN
+#if PK_FEATURE_ENERGY
     tmp=String(str)+","+String(kiln_temp,0)+","+String(case_temp,0)+","+String((int)(Energy_Usage-EnW_last));
     EnW_last=Energy_Usage;
 #else
@@ -188,62 +190,3 @@ File dir,file;
 }
 
 
-/*
-** Debuging and logging to syslog
-*/
-
-
-void dbgLog(uint16_t pri, const char *fmt, ...) {
-
-  if(!Prefs[PRF_DBG_SERIAL].value.uint8 && !Prefs[PRF_DBG_SYSLOG].value.uint8) return; // don't waste time and resources if logging off
-  
-  char *message;
-  va_list args;
-  size_t initialLen;
-  size_t len;
-  bool result;
-
-  initialLen = strlen(fmt);
-
-  message = new char[initialLen + 1];
-
-  va_start(args, fmt);
-  len = vsnprintf(message, initialLen + 1, fmt, args);
-  if (len > initialLen) {
-    delete[] message;
-    message = new char[len + 1];
-
-    vsnprintf(message, len + 1, fmt, args);
-  }
-  va_end(args);
-    
-  if(Prefs[PRF_DBG_SERIAL].value.uint8) Serial.print(message);
-  if(Prefs[PRF_DBG_SYSLOG].value.uint8) syslog.log(pri,message);
-
-  delete[] message;
-}
-
-
-void initSysLog(){
-
-  if(Prefs[PRF_DBG_SYSLOG].value.uint8){
-    DBG dbgLog(LOG_DEBUG,"[LOG] Trying to enable Syslog\n");
-    // check wheter we have all syslog params defined, if not - nullyfi prefs
-    if(!strlen(Prefs[PRF_SYSLOG_SRV].value.str) || !Prefs[PRF_SYSLOG_PORT].value.uint16){
-      Prefs[PRF_DBG_SYSLOG].value.uint8=0;
-      DBG dbgLog(LOG_ERR,"[LOG] Syslog enabled but not configured - disabling syslog\n");
-      return;
-    }
-    syslog.server(Prefs[PRF_SYSLOG_SRV].value.str, Prefs[PRF_SYSLOG_PORT].value.uint16);
-    syslog.deviceHostname("PIDKiln-ESP32");
-    syslog.appName("PIDKiln");
-    syslog.defaultPriority(LOG_KERN);
-    syslog.log(LOG_INFO, "Begin syslog");
-    DBG dbgLog(LOG_DEBUG,"[LOG] Syslog enabled\n");
-  }else DBG dbgLog(LOG_DEBUG,"[LOG] Syslog disabled\n");
-}
-
-
-void initSerial(){
-  if(Prefs[PRF_DBG_SERIAL].value.uint8) Serial.begin(115200);
-}

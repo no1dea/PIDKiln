@@ -1,3 +1,8 @@
+1.6 (2026.11.17)
+- modular compile-time features via PK_FEATURE_* + named envs (full/web/local/core); secondary .ino → .cpp
+- split addons into heat/emr/alarm/housing_tc/ssr2/energy; stubs when features off
+- Unity native suites: test_logic, test_safety, test_program (+ CI workflow)
+
 1.6 (2026.11.16)
 - PlatformIO / pioarduino primary build (Arduino-ESP32 3.3.12 pinned)
 - pinned ESP32Async AsyncTCP + ESPAsyncWebServer; TEMPLATE_PLACEHOLDER via build_flags
