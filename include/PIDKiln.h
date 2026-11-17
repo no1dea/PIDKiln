@@ -255,9 +255,8 @@ extern WiFiUDP udpClient;
 extern Syslog syslog;
 #endif
 
-#define JS_JQUERY "https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"
-#define JS_CHART "https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.bundle.min.js"
-#define JS_CHART_DS "https://cdn.jsdelivr.net/npm/chartjs-plugin-datasource@0.1.0/dist/chartjs-plugin-datasource.min.js"
+#define JS_UPLOT "https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.iife.min.js"
+#define CSS_UPLOT "https://cdn.jsdelivr.net/npm/uplot@1.6.31/dist/uPlot.min.css"
 
 /* Local UI */
 void load_msg(char msg[MAX_CHARS_PL]);
@@ -347,6 +346,13 @@ void Add_log_line();
 void Close_log_file();
 void Clean_LOGS();
 uint8_t Load_LOGS_Dir();
+
+/* Live chart ring (RAM); CSV on LittleFS remains the durable archive */
+void ChartRing_Clear();
+void ChartRing_Push(uint32_t ts, int16_t kiln_c, int16_t case_c, int16_t energy);
+uint32_t ChartRing_Gen();
+size_t ChartRing_Count();
+void ChartRing_PrintPointsJson(Print &out, uint32_t since_ts);
 void dbgLog(uint16_t pri, const char *fmt, ...);
 void initSysLog();
 void initSerial();

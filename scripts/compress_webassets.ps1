@@ -1,7 +1,7 @@
 # Precompress static web assets for ESPAsyncWebServer gzip serving.
-# Large Chart/jQuery libs: keep only *.gz on LittleFS (plain removed after compress).
+# Large libs (uPlot): keep only *.gz on LittleFS (plain removed after compress).
 # CDN redirect mode does not need local plain copies of those libs.
-# To bump a large lib: drop the new uncompressed file in data/js/, re-run this script.
+# To bump a large lib: drop the new uncompressed file in data/js/ or data/css/, re-run this script.
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $PSScriptRoot
 Set-Location $root
@@ -43,14 +43,14 @@ $keepBoth = @(
   "data\css\nav.css",
   "data\js\nav.js",
   "data\js\programs.js",
-  "data\js\json.js"
+  "data\js\json.js",
+  "data\js\chart.js"
 )
 
 # Large libs: gzip then delete plain so send()/serveStatic serve Content-Encoding: gzip
 $largeLibsOnlyGz = @(
-  "data\js\jquery-3.7.1.min.js",
-  "data\js\Chart.2.9.4.bundle.min.js",
-  "data\js\chartjs-datasource.min.js"
+  "data\js\uPlot.iife.min.js",
+  "data\css\uPlot.min.css"
 )
 
 Write-Host "Compressing assets (keep plain + .gz)..."
@@ -58,9 +58,26 @@ foreach ($rel in $keepBoth) {
   Compress-GzipFile -Path (Join-Path $root $rel) | Out-Null
 }
 
-Write-Host "Compressing large JS libs (.gz only on LittleFS)..."
+Write-Host "Compressing large JS/CSS libs (.gz only on LittleFS)..."
 foreach ($rel in $largeLibsOnlyGz) {
   Compress-GzipFile -Path (Join-Path $root $rel) -RemoveSource | Out-Null
 }
 
-Write-Host "Done. Do not gzip templated chart.js or HTML parsers."
+# Remove obsolete Chart.js / jQuery blobs if still present
+$obsolete = @(
+  "data\js\jquery-3.7.1.min.js",
+  "data\js\jquery-3.7.1.min.js.gz",
+  "data\js\Chart.2.9.4.bundle.min.js",
+  "data\js\Chart.2.9.4.bundle.min.js.gz",
+  "data\js\chartjs-datasource.min.js",
+  "data\js\chartjs-datasource.min.js.gz"
+)
+foreach ($rel in $obsolete) {
+  $p = Join-Path $root $rel
+  if (Test-Path $p) {
+    Remove-Item $p -Force
+    Write-Host "Removed obsolete $rel"
+  }
+}
+
+Write-Host "Done."

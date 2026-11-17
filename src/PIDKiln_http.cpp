@@ -457,43 +457,60 @@ void handleLogsIndex(AsyncWebServerRequest *request) {
 }
 
 
-// Template preprocessor for chart.js
-//
-String Chart_parser(const String& var) {
+/* HTTP UI live chart feed — RAM ring + program profile (not /api/v1). */
+static void print_program_profile_json(AsyncResponseStream *response) {
   KilnTelemetry telem;
   Kiln_ReadTelemetry(&telem);
-  time_t current_time = telem.program_run_start ? telem.program_run_start : time(NULL);
-  char *str;
-  char point[96];
-
-  if(var == "CHART_DATA" && telem.program_run_size>0 && Program_run){
-    String tmp;
-    tmp.reserve((size_t)telem.program_run_size * 96u + 128u);
-    str=ctime(&current_time);str[strlen(str)-1]='\0';
-    snprintf(point, sizeof(point), "{x:'%s',y:%.1f},", str,
-             telem.program_start_temp ? (double)telem.program_start_temp : telem.kiln_temp);
-    tmp += point;
-    for(uint16_t a=0; a<telem.program_run_size && a<Program_run_size; a++){
-       if(a>0) tmp += ',';
-       current_time+=Program_run[a].togo*60;
-       str=ctime(&current_time);str[strlen(str)-1]='\0';
-       snprintf(point, sizeof(point), "{x:'%s',y:%u},", str, Program_run[a].temp);
-       tmp += point;
-       current_time+=Program_run[a].dwell*60;
-       str=ctime(&current_time);str[strlen(str)-1]='\0';
-       snprintf(point, sizeof(point), "{x:'%s',y:%u}", str, Program_run[a].temp);
-       tmp += point;
-    }
-    return tmp;
-  }else if(var == "LOG_FILE"){
-    if(CSVFile) return http_buf(CSVFile.path());
-    return String("/logs/test.csv");
-  }else if(var == "PROGRAM_NAME"){
-    return http_buf(Program_run_name);
-  }else if(var == "CONFIG"){
-    return String(CSVFile ? "config_with" : "config_without");
+  response->print('[');
+  if (!telem.program_run_size || !Program_run) {
+    response->print(']');
+    return;
   }
-  return String();
+  time_t current_time = telem.program_run_start ? telem.program_run_start : time(NULL);
+  double y0 = telem.program_start_temp ? (double)telem.program_start_temp : telem.kiln_temp;
+  response->printf("{\"t\":%ld,\"y\":%.1f}", (long)current_time, y0);
+  for (uint16_t a = 0; a < telem.program_run_size && a < Program_run_size; a++) {
+    current_time += Program_run[a].togo * 60;
+    response->printf(",{\"t\":%ld,\"y\":%u}", (long)current_time, Program_run[a].temp);
+    current_time += Program_run[a].dwell * 60;
+    response->printf(",{\"t\":%ld,\"y\":%u}", (long)current_time, Program_run[a].temp);
+  }
+  response->print(']');
+}
+
+static void handleChartJson(AsyncWebServerRequest *request) {
+  if (!_webAuth(request))
+    return;
+
+  uint32_t since = 0;
+  if (request->hasParam("since")) {
+    since = (uint32_t)strtoul(request->getParam("since")->value().c_str(), NULL, 10);
+  }
+
+  AsyncResponseStream *response = request->beginResponseStream("application/json");
+  response->print('{');
+  response->printf("\"gen\":%lu,", (unsigned long)ChartRing_Gen());
+  response->print("\"log_path\":");
+  if (CSVFile) {
+    const char *path = CSVFile.path();
+    response->print('"');
+    if (path) {
+      for (const char *p = path; *p; ++p) {
+        if (*p == '"' || *p == '\\')
+          response->print('\\');
+        response->print(*p);
+      }
+    }
+    response->print('"');
+  } else {
+    response->print("null");
+  }
+  response->print(",\"program\":");
+  print_program_profile_json(response);
+  response->print(",\"points\":");
+  ChartRing_PrintPointsJson(*response, since);
+  response->print('}');
+  request->send(response);
 }
 
 
@@ -882,45 +899,36 @@ void SETUP_WebServer(void) {
 
   server.on("/index.html", HTTP_POST, handleIndexPost);
   
-  server.on("/js/chart.js", HTTP_GET, [](AsyncWebServerRequest *request){
-    if(!_webAuth(request)) return;
-    request->send(LittleFS, "/js/chart.js", String(), false, Chart_parser);
-  });
-
-
   // Local JS mode: large libs ship as precompressed *.gz only under data/js/.
   // send(LittleFS, logicalPath) falls back to path.gz and sets Content-Encoding: gzip.
-  // Regenerate with scripts/compress_webassets.ps1 after bumping jquery/chart assets.
-  if(Prefs[PRF_HTTP_JS_LOCAL].value.uint8){
-    server.on("/js/jquery-3.7.1.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
-      if(!_webAuth(request)) return;
-      request->send(LittleFS, "/js/jquery-3.7.1.min.js", "text/javascript");
+  // Regenerate with scripts/compress_webassets.ps1 after bumping uPlot assets.
+  if (Prefs[PRF_HTTP_JS_LOCAL].value.uint8) {
+    server.on("/js/uPlot.iife.min.js", HTTP_GET, [](AsyncWebServerRequest *request) {
+      if (!_webAuth(request))
+        return;
+      request->send(LittleFS, "/js/uPlot.iife.min.js", "text/javascript");
     });
-    server.on("/js/Chart.2.9.4.bundle.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
-      if(!_webAuth(request)) return;
-      request->send(LittleFS, "/js/Chart.2.9.4.bundle.min.js", "text/javascript");
+    server.on("/css/uPlot.min.css", HTTP_GET, [](AsyncWebServerRequest *request) {
+      if (!_webAuth(request))
+        return;
+      request->send(LittleFS, "/css/uPlot.min.css", "text/css");
     });
-    server.on("/js/chartjs-datasource.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
-      if(!_webAuth(request)) return;
-      request->send(LittleFS, "/js/chartjs-datasource.min.js", "text/javascript");
+  } else {
+    server.on("/js/uPlot.iife.min.js", HTTP_GET, [](AsyncWebServerRequest *request) {
+      request->redirect(JS_UPLOT);
     });
-  }else{
-    server.on("/js/jquery-3.7.1.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
-      request->redirect(JS_JQUERY);
-    });
-    server.on("/js/Chart.2.9.4.bundle.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
-      request->redirect(JS_CHART);
-    });
-    server.on("/js/chartjs-datasource.min.js", HTTP_GET, [](AsyncWebServerRequest* request) {
-      request->redirect(JS_CHART_DS);
+    server.on("/css/uPlot.min.css", HTTP_GET, [](AsyncWebServerRequest *request) {
+      request->redirect(CSS_UPLOT);
     });
   }
 
-
-  server.on("/PIDKiln_vars.json", HTTP_GET, [](AsyncWebServerRequest *request){
-    if(!_webAuth(request)) return;
+  server.on("/PIDKiln_vars.json", HTTP_GET, [](AsyncWebServerRequest *request) {
+    if (!_webAuth(request))
+      return;
     request->send(LittleFS, "/PIDKiln_vars.json", "application/json", false, handleVars);
   });
+
+  server.on("/PIDKiln_chart.json", HTTP_GET, handleChartJson);
 
   // Dynamic directory indexes (no rewritten index.html on LittleFS)
   server.on("/programs/", HTTP_GET, handleProgramsIndex);

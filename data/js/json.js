@@ -29,26 +29,19 @@ function change_program_status(ns) {
     setDisabled("pause_bttn", false);
     setDisabled("end_bttn", false);
     setDisabled("abort_bttn", false);
-    if (typeof chart_update_id !== "undefined" && !chart_update_id) {
-      chart_update_id = setTimeout(chart_update, 30000);
-    }
   } else if (ns == 3) {
     dis_all_bttn();
     setDisabled("start_bttn", false);
     setButtonValue("start_bttn", "Resume program");
     setDisabled("end_bttn", false);
     setDisabled("abort_bttn", false);
-    if (typeof chart_update_id !== "undefined" && !chart_update_id) {
-      chart_update_id = setTimeout(chart_update, 30000);
-    }
   } else {
     dis_all_bttn();
     setButtonValue("start_bttn", "Start program");
     setDisabled("start_bttn", false);
-    if (typeof chart_update_id !== "undefined") {
-      clearTimeout(chart_update_id);
-      chart_update_id = null;
-    }
+  }
+  if (ns !== program_status && typeof window.pidkilnChartRefresh === "function") {
+    window.pidkilnChartRefresh(true);
   }
   program_status = ns;
 }

@@ -1,193 +1,179 @@
-var ctx = document.getElementById('ProgramChart').getContext('2d');
-var chart_update_id;
+/* Live kiln chart — uPlot + /PIDKiln_chart.json (HTTP UI). CSV is durable archive only. */
+(function () {
+  var chartUrl = "/PIDKiln_chart.json";
+  var POLL_MS = 10000;
+  var host = document.getElementById("ProgramChart");
+  if (!host || typeof uPlot === "undefined") return;
 
-var chartColors = {
-	red: 'rgb(232, 120, 120)',
-	blue: 'rgb(107, 140, 174)',
-	yel: 'rgb(212, 160, 90)',
-	green: 'rgba(107, 140, 174, 0.18)'
-};
+  var plot = null;
+  var lastGen = null;
+  var lastSince = 0;
+  var pollTimer = null;
+  var programPts = [];
+  var livePts = [];
+  var hasEnergy = false;
 
-Chart.defaults.global.defaultFontColor = '#9aa0a8';
-Chart.defaults.global.defaultFontFamily = 'ui-monospace, Cascadia Mono, Consolas, monospace';
+  function stroke(color, width) {
+    return { stroke: color, width: width || 2 };
+  }
 
-var axisDefaults = {
-	gridLines: {
-		color: 'rgba(61, 68, 80, 0.9)',
-		zeroLineColor: 'rgba(61, 68, 80, 1)'
-	},
-	ticks: {
-		fontColor: '#9aa0a8'
-	},
-	scaleLabel: {
-		fontColor: '#c8ccd2'
-	}
-};
+  function makeOpts(wantEnergy) {
+    var series = [
+      {},
+      Object.assign({ label: "Program", scale: "C" }, stroke("#6b8cae")),
+      Object.assign({ label: "Kiln", scale: "C" }, stroke("#e87878")),
+      Object.assign({ label: "Housing", scale: "C" }, stroke("#d4a05a"))
+    ];
+    var axes = [
+      {
+        stroke: "#9aa0a8",
+        grid: { stroke: "rgba(61,68,80,0.9)" },
+        ticks: { stroke: "#3d4450" }
+      },
+      {
+        scale: "C",
+        stroke: "#9aa0a8",
+        grid: { stroke: "rgba(61,68,80,0.9)" },
+        ticks: { stroke: "#3d4450" }
+      }
+    ];
+    var scales = { x: { time: true }, C: { auto: true } };
+    if (wantEnergy) {
+      series.push(Object.assign({ label: "Energy", scale: "W" }, stroke("#7fa0c0", 1)));
+      axes.push({
+        scale: "W",
+        side: 1,
+        stroke: "#9aa0a8",
+        grid: { show: false },
+        ticks: { stroke: "#3d4450" }
+      });
+      scales.W = { auto: true };
+    }
+    return {
+      width: Math.max(host.clientWidth || (host.parentElement && host.parentElement.clientWidth) || 600, 280),
+      height: Math.max(Math.min(Math.round((host.clientWidth || 600) * 0.4), 320), 180),
+      series: series,
+      axes: axes,
+      scales: scales,
+      legend: { show: true }
+    };
+  }
 
-var config_with = {
-	type: 'line',
-	data: {
-		datasets: [{
-			yAxisID: 'temperature',
-			backgroundColor: 'transparent',
-			borderColor: chartColors.red,
-			pointBackgroundColor: chartColors.red,
-			tension: 0.1,
-			fill: false
-		     }, {
-			yAxisID: 'temperature',
-			backgroundColor: 'transparent',
-			borderColor: chartColors.yel,
-			pointBackgroundColor: chartColors.yel,
-			tension: 0.1,
-			fill: false
-		     }, {
-			yAxisID: 'watts',
-			backgroundColor: chartColors.green,
-			borderColor: 'transparent',
-			fill: true
-		     }, {
-			label: 'Running program ~PROGRAM_NAME~',
-			yAxisID: 'temperature',
-			backgroundColor: 'transparent',
-			borderColor: chartColors.blue,
-			fill: false,
-			tension: 0.1,
-			data: [~CHART_DATA~]
-		}]
-	},
-	plugins: [ChartDataSource],
-	options: {
-		legend: {
-			labels: { fontColor: '#c8ccd2' }
-		},
-		title: {
-			display: true,
-			text: 'Set program: ~PROGRAM_NAME~ vs actual temperature',
-			fontColor: '#e8eaed'
-		},
-		responsive: true,
-		scales: {
-			xAxes: [{
-				type: 'time',
-				time: {
-					tooltipFormat: 'YYYY-MM-DD HH:mm',
-					displayFormats: {
-						millisecond: 'HH:mm:ss.SSS',
-						second: 'HH:mm:ss',
-						minute: 'HH:mm',
-						hour: 'HH'
-					}
-				},
-				gridLines: axisDefaults.gridLines,
-				ticks: axisDefaults.ticks,
-				scaleLabel: {
-					display: true,
-					labelString: 'Date',
-					fontColor: axisDefaults.scaleLabel.fontColor
-				}
-			}],
-			yAxes: [{
-				id: 'temperature',
-				gridLines: axisDefaults.gridLines,
-				ticks: axisDefaults.ticks,
-				scaleLabel: {
-					display: true,
-					labelString: 'Temperature (C)',
-					fontColor: axisDefaults.scaleLabel.fontColor
-				}
-			},{
-				id: 'watts',
-				position: 'right',
-				gridLines: {
-					display: false
-				},
-				ticks: {
-					bounds: 'data',
-					beginAtZero: true,
-					fontColor: axisDefaults.ticks.fontColor
-				},
-				scaleLabel: {
-					display: true,
-					labelString: 'Watts',
-					fontColor: axisDefaults.scaleLabel.fontColor
-				}
-			}]
-		},
-		plugins: {
-			datasource: {
-				type: 'csv',
-				url: '~LOG_FILE~',
-				delimiter: ',',
-				rowMapping: 'index',
-				datasetLabels: true,
-				indexLabels: true
-			}
-		}
-	}
-};
+  function buildData() {
+    var map = {};
+    function touch(t) {
+      if (!map[t]) map[t] = { t: t, p: null, k: null, c: null, e: null };
+      return map[t];
+    }
+    for (var i = 0; i < programPts.length; i++) {
+      touch(programPts[i].t).p = programPts[i].y;
+    }
+    for (var j = 0; j < livePts.length; j++) {
+      var row = touch(livePts[j].t);
+      row.k = livePts[j].k;
+      row.c = livePts[j].c;
+      if (typeof livePts[j].e === "number") {
+        row.e = livePts[j].e;
+        hasEnergy = true;
+      }
+    }
+    var times = Object.keys(map)
+      .map(Number)
+      .sort(function (a, b) {
+        return a - b;
+      });
+    var xs = [];
+    var yp = [];
+    var yk = [];
+    var yc = [];
+    var ye = [];
+    for (var n = 0; n < times.length; n++) {
+      var r = map[times[n]];
+      xs.push(r.t);
+      yp.push(r.p);
+      yk.push(r.k);
+      yc.push(r.c);
+      ye.push(r.e);
+    }
+    if (!xs.length) {
+      xs = [Math.floor(Date.now() / 1000)];
+      yp = [null];
+      yk = [null];
+      yc = [null];
+      ye = [null];
+    }
+    var data = [xs, yp, yk, yc];
+    if (hasEnergy) data.push(ye);
+    return data;
+  }
 
+  function ensurePlot() {
+    var want = hasEnergy;
+    if (plot && plot.series.length === (want ? 5 : 4)) return;
+    if (plot) {
+      plot.destroy();
+      plot = null;
+      host.innerHTML = "";
+    }
+    plot = new uPlot(makeOpts(want), buildData(), host);
+  }
 
-var config_without = {
-	type: 'line',
-	data: {
-		datasets: [{
-			label: 'Loaded program: ~PROGRAM_NAME~',
-			tension: 0.1,
-			yAxisID: 'temperature',
-			backgroundColor: 'transparent',
-			borderColor: chartColors.blue,
-			fill: false,
-			data: [~CHART_DATA~]
-		}]
-	},
-	options: {
-		legend: {
-			labels: { fontColor: '#c8ccd2' }
-		},
-		title: {
-			display: true,
-			text: 'Ready to run program temperature/time graph',
-			fontColor: '#e8eaed'
-		},
-		responsive: true,
-		scales: {
-			xAxes: [{
-				type: 'time',
-				time: {
-					tooltipFormat: 'YYYY-MM-DD HH:mm',
-					displayFormats: {
-						millisecond: 'HH:mm:ss.SSS',
-						second: 'HH:mm:ss',
-						minute: 'HH:mm',
-						hour: 'HH'
-					}
-				},
-				gridLines: axisDefaults.gridLines,
-				ticks: axisDefaults.ticks,
-				scaleLabel: {
-					display: true,
-					labelString: 'Date',
-					fontColor: axisDefaults.scaleLabel.fontColor
-				}
-			}],
-			yAxes: [{
-				id: 'temperature',
-				gridLines: axisDefaults.gridLines,
-				ticks: axisDefaults.ticks,
-				scaleLabel: {
-					display: true,
-					labelString: 'Temperature (°C)',
-					fontColor: axisDefaults.scaleLabel.fontColor
-				}
-			}]
-		}
-	}
-};
+  function applyPayload(payload, incremental) {
+    if (!payload) return;
+    if (lastGen !== null && payload.gen !== lastGen) {
+      programPts = [];
+      livePts = [];
+      lastSince = 0;
+      hasEnergy = false;
+      incremental = false;
+    }
+    lastGen = payload.gen;
 
-var chart = new Chart(ctx, ~CONFIG~);
+    if (!incremental && payload.program) {
+      programPts = payload.program.slice();
+    }
 
-function chart_update(){
-  chart.update();
-  chart_update_id=setTimeout(chart_update, 30000);
-}
+    var pts = payload.points || [];
+    for (var j = 0; j < pts.length; j++) {
+      livePts.push(pts[j]);
+      if (pts[j].t > lastSince) lastSince = pts[j].t;
+    }
+
+    ensurePlot();
+    if (plot) plot.setData(buildData());
+  }
+
+  function fetchChart(full) {
+    var url = chartUrl;
+    if (!full && lastSince) url += "?since=" + lastSince;
+    return fetch(url, { credentials: "same-origin", cache: "no-store" })
+      .then(function (res) {
+        if (!res.ok) throw new Error("chart " + res.status);
+        return res.json();
+      })
+      .then(function (data) {
+        applyPayload(data, !full && !!lastSince);
+      })
+      .catch(function () {});
+  }
+
+  function schedule() {
+    pollTimer = setTimeout(function () {
+      fetchChart(false).then(schedule);
+    }, POLL_MS);
+  }
+
+  function onResize() {
+    if (!plot) return;
+    var w = Math.max(host.clientWidth || (host.parentElement && host.parentElement.clientWidth) || 600, 280);
+    var h = Math.max(Math.min(Math.round(w * 0.4), 320), 180);
+    plot.setSize({ width: w, height: h });
+  }
+
+  window.addEventListener("resize", onResize);
+  window.pidkilnChartRefresh = function (full) {
+    return fetchChart(!!full);
+  };
+
+  fetchChart(true).then(schedule);
+})();

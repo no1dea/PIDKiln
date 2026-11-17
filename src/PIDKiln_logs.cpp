@@ -1,11 +1,85 @@
 #include <LittleFS.h>
+#include <time.h>
 #include "PIDKiln.h"
 /*
-** Logging functionality
+** Logging functionality + live chart ring (RAM)
 **
 */
 
 double EnW_last=0;    // last energy consumption for csv report
+
+/* ~24h at 30s LOG_Window; PSRAM preferred via MALLOC */
+#define CHART_RING_CAP 2880
+
+struct ChartSample {
+  uint32_t t;
+  int16_t k;
+  int16_t c;
+  int16_t e;
+};
+
+static ChartSample *chart_ring = NULL;
+static uint16_t chart_head = 0;
+static uint16_t chart_count = 0;
+static uint32_t chart_gen = 0;
+
+static bool chart_ring_ensure(void) {
+  if (chart_ring)
+    return true;
+  chart_ring = (ChartSample *)MALLOC(sizeof(ChartSample) * CHART_RING_CAP);
+  if (!chart_ring)
+    chart_ring = (ChartSample *)malloc(sizeof(ChartSample) * CHART_RING_CAP);
+  return chart_ring != NULL;
+}
+
+void ChartRing_Clear() {
+  chart_head = 0;
+  chart_count = 0;
+  chart_gen++;
+  if (!chart_ring)
+    chart_ring_ensure();
+}
+
+void ChartRing_Push(uint32_t ts, int16_t kiln_c, int16_t case_c, int16_t energy) {
+  if (!chart_ring_ensure())
+    return;
+  chart_ring[chart_head].t = ts;
+  chart_ring[chart_head].k = kiln_c;
+  chart_ring[chart_head].c = case_c;
+  chart_ring[chart_head].e = energy;
+  chart_head = (uint16_t)((chart_head + 1) % CHART_RING_CAP);
+  if (chart_count < CHART_RING_CAP)
+    chart_count++;
+}
+
+uint32_t ChartRing_Gen() { return chart_gen; }
+
+size_t ChartRing_Count() { return chart_count; }
+
+void ChartRing_PrintPointsJson(Print &out, uint32_t since_ts) {
+  out.print('[');
+  if (!chart_ring || !chart_count) {
+    out.print(']');
+    return;
+  }
+  uint16_t start = (uint16_t)((chart_head + CHART_RING_CAP - chart_count) % CHART_RING_CAP);
+  bool first = true;
+  for (uint16_t i = 0; i < chart_count; i++) {
+    const ChartSample &s = chart_ring[(start + i) % CHART_RING_CAP];
+    if (s.t <= since_ts)
+      continue;
+    if (!first)
+      out.print(',');
+    first = false;
+#if PK_FEATURE_ENERGY
+    out.printf("{\"t\":%lu,\"k\":%d,\"c\":%d,\"e\":%d}", (unsigned long)s.t, (int)s.k,
+               (int)s.c, (int)s.e);
+#else
+    out.printf("{\"t\":%lu,\"k\":%d,\"c\":%d}", (unsigned long)s.t, (int)s.k, (int)s.c);
+#endif
+  }
+  out.print(']');
+}
 
 
 // Starts a new log file
@@ -13,6 +87,8 @@ double EnW_last=0;    // last energy consumption for csv report
 void Init_log_file(){
 char str[33];
 struct tm timeinfo, *tmm;
+
+  ChartRing_Clear();
 
   if(CSVFile) CSVFile.close();
   if(getLocalTime(&timeinfo)) strftime(str, 32, "/logs/%y%m%d_%H%M%S.csv", &timeinfo); //YYMMDD_HHMMSS.log
@@ -65,19 +141,28 @@ struct tm timeinfo, *tmm;
 void Add_log_line(){
 String tmp;
 char str[33];
-struct tm timeinfo,*tmm;
-                 
+struct tm timeinfo;
+int energy_delta = 0;
+uint32_t ts;
+
   if(!CSVFile) return;
-  
-  if(getLocalTime(&timeinfo)) strftime(str, 29, "%F %T", &timeinfo);
-  else sprintf(str,"%d",millis());
+
+  ts = (uint32_t)time(NULL);
+  if (getLocalTime(&timeinfo))
+    strftime(str, 29, "%F %T", &timeinfo);
+  else
+    sprintf(str, "%d", (int)millis());
 
 #if PK_FEATURE_ENERGY
-    tmp=String(str)+","+String(kiln_temp,0)+","+String(case_temp,0)+","+String((int)(Energy_Usage-EnW_last));
-    EnW_last=Energy_Usage;
+  energy_delta = (int)(Energy_Usage - EnW_last);
+  EnW_last = Energy_Usage;
+  tmp = String(str) + "," + String(kiln_temp, 0) + "," + String(case_temp, 0) + "," +
+        String(energy_delta);
 #else
-    tmp=String(str)+","+String(kiln_temp,0)+","+String(case_temp,0);
+  tmp = String(str) + "," + String(kiln_temp, 0) + "," + String(case_temp, 0);
 #endif
+
+  ChartRing_Push(ts, (int16_t)kiln_temp, (int16_t)case_temp, (int16_t)energy_delta);
 
   DBG dbgLog(LOG_INFO,"[LOG] Writing to log file:%s\n",tmp.c_str());
   CSVFile.println();

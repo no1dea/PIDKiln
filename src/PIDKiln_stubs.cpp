@@ -95,6 +95,13 @@ void Add_log_line() {}
 void Close_log_file() {}
 void Clean_LOGS() {}
 uint8_t Load_LOGS_Dir() { return 0; }
+void ChartRing_Clear() {}
+void ChartRing_Push(uint32_t, int16_t, int16_t, int16_t) {}
+uint32_t ChartRing_Gen() { return 0; }
+size_t ChartRing_Count() { return 0; }
+void ChartRing_PrintPointsJson(Print &out, uint32_t) {
+  out.print("[]");
+}
 #endif
 
 #if !PK_FEATURE_SYSLOG

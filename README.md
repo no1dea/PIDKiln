@@ -250,7 +250,7 @@ Build checks: `pio run -e esp32-wrover` (HTTP+API) and `pio run -e esp32-wrover-
 - `Generate_INDEX` / `Generate_LOGS_INDEX` — names are historical; they only refresh in-memory directory lists
 - Program/log dir loaders still skip a file named `index.html` (leftover from when indexes were written to the FS)
 - LCD SW-SPI constructor remains commented as an alternate wiring path
-- Chart.js stays on 2.9.4 until `chartjs-plugin-datasource` has a Chart 3/4 path
+- Dashboard chart uses **uPlot** with live series from `/PIDKiln_chart.json` (RAM ring); CSV under `/logs/` remains the durable archive (power-loss forensics / download)
 - Bench-verify SSR1 on GPIO25, SoftAP prefs, and thermal-runaway abort on real hardware
 
 ### Tests without hardware
