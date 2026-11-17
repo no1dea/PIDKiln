@@ -19,7 +19,7 @@ const int MAX_Prog_File_Size=10240;  // maximum file size (bytes) that can be up
 */
 
 #define EMR_RELAY_PIN 21
-#define SSR1_RELAY_PIN 19
+#define SSR1_RELAY_PIN 25   // was 19 — that pin is VSPI MISO used by the LCD
 //#define SSR2_RELAY_PIN 22   // if you want to use additional SSR for second heater, uncoment this
 
 // MAX31855 variables/defs
@@ -162,6 +162,7 @@ typedef enum {
   PR_ERR_MAX31B_INT_ERR,  // failed to read MAX31855 internal temperature on case
   PR_ERR_MAX31B_KPROBE,   // failed to read K-probe temperature on case
   PR_ERR_USER_ABORT,      // user aborted
+  PR_ERR_THERMAL_RUNAWAY, // kiln failed to heat within Thermal_Runaway window
   PR_ERR_end
 } PROGRAM_ERROR_STATE;
 
@@ -319,9 +320,6 @@ const char *PDate = "2026.11.16";
 #endif
 #ifndef REALLOC
 #define REALLOC ps_realloc
-#endif
-#ifndef RELAX_WDT_FOR_ASYNCTCP
-#define RELAX_WDT_FOR_ASYNCTCP 1
 #endif
 // If defined debug - do debug, otherwise comment out all debug lines
 #define DBG if(DEBUG)

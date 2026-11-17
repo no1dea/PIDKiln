@@ -836,7 +836,7 @@ void SETUP_WebServer(void) {
   server.serveStatic("/icons/", LittleFS, "/icons/").setCacheControl("max-age=86400");
   server.serveStatic("/js/", LittleFS, "/js/").setCacheControl("max-age=86400");
   server.serveStatic("/css/", LittleFS, "/css/").setCacheControl("max-age=86400");
-  server.serveStatic(PREFS_FILE, LittleFS, PREFS_FILE).setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
+  // Do not serve PREFS_FILE over HTTP — it contains WiFi/auth secrets.
   server.serveStatic("/favicon.ico", LittleFS, "/icons/heat.png");
 
   server.onNotFound([](AsyncWebServerRequest *request){

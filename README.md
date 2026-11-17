@@ -117,7 +117,7 @@ GND	| GND
 ESP32	| SSR
 --------|-------
 GND	| GND
-19**    | IN
+25**    | IN
 
 ESP32   | EMR (SLA-05VDC-SL-C)
 --------|----------------
@@ -127,7 +127,7 @@ GND     | GND
 
 (*) Do not connect 5V from ESP - use external source. This can be any 5V-48V power supply with around 1W power.
 
-(**) For additional SSR relay (works simultaneously with first one) use PIN 22 - see documentation for explanation
+(**) GPIO 25 (not 19 — 19 is VSPI MISO for the LCD). For an additional SSR (simultaneous with the first) use PIN 22.
 
 **Power meter**
 

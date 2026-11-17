@@ -139,8 +139,10 @@ void Input_Loop(void * parameter) {
       Rotate(); // encoderValue is global..
       DBG dbgLog(LOG_DEBUG,"[INPUT] Encoder rotated %d\n",encoderValue);
       encoderValue=0;
+    }else{
+      // Idle: sleep so we do not busy-spin beside PID on core 0
+      vTaskDelay(20 / portTICK_PERIOD_MS);
     }
-    yield();
   }
 }
 

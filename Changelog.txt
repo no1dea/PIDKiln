@@ -8,6 +8,7 @@
 - replaced Saur0o0n/enjoyneering MAX31855 fork with Adafruit MAX31855 1.4.2 + BusIO 1.17.4 (HSPI dual CS unchanged)
 - bumped U8g2 to 2.36.19; web UI jQuery 3.7.1 + Chart.js 2.9.4 (Chart 3/4 blocked by chartjs-plugin-datasource)
 - local web assets served precompressed (*.gz) via ESPAsyncWebServer; large jquery/chart libs .gz-only on LittleFS
+- safety/debt: keep core WDTs enabled; enforce Thermal_Runaway; SSR1 on GPIO25 (was 19/VSPI MISO); Program[] length guard; fix # comment strip; Input_Loop idle delay; stop HTTP serving of pidkiln.conf
 
 1.5 (2024.12.18)
 - updated code to compile against ESP3+ API, Arduino 2+ and latest asynce libraries

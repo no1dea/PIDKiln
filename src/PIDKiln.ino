@@ -29,7 +29,6 @@
 #include <FS.h>
 #include <LittleFS.h>
 #include <ESPAsyncWebServer.h>
-#include <esp_task_wdt.h>
 
 #include "PIDKiln.h"
 #include <PIDKilnLogic.h>
@@ -38,7 +37,7 @@
 ** Static, editable parameters. Some of them, can be replaces with PIDKiln preferences.
 ** Please set them up before uploading.
 **
-** TEMPLATE_PLACEHOLDER, DEBUG, MALLOC/REALLOC, RELAX_WDT_FOR_ASYNCTCP are set via platformio.ini build_flags.
+** TEMPLATE_PLACEHOLDER, DEBUG, MALLOC/REALLOC are set via platformio.ini build_flags.
 */
 
 
@@ -107,17 +106,8 @@ boolean valid_filename(char *file){
 void setup() {
   char msg[MAX_CHARS_PL];
 
-#if RELAX_WDT_FOR_ASYNCTCP
-// Intentional hang mitigation: if AsyncTCP/web hangs, prefer not resetting a hot kiln.
-// Prefer public Arduino/IDF WDT APIs (portable toward 4.x). Revisit once ESP32Async is proven stable.
-  esp_task_wdt_config_t config = {
-    .timeout_ms = 60* 1000,  //  60 seconds
-    .trigger_panic = true,
-  };
-  esp_task_wdt_reconfigure(&config);
-  disableCore0WDT();
-  disableCore1WDT();
-#endif
+  // Keep core WDTs enabled so a stalled Program_Loop cannot leave SSR stuck ON.
+  // AsyncTCP feeds the task WDT itself; do not blanket-disable IDLE WDTs.
 
   // Initialize prefs array with default values
   Setup_prefs();

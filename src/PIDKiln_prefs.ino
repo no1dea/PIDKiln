@@ -86,7 +86,7 @@ int pos=0;
       line.trim();
       if(!line.length()) continue;         // empty line - skip it
       if(line.startsWith("#")) continue;   // skip every comment line
-      if(pos=line.indexOf("#")){
+      if((pos=line.indexOf("#"))>=0){
         line=line.substring(0,pos);
         line.trim(); // trim again after removing comment
       }
@@ -243,7 +243,7 @@ char tmp[30];
         break;
       case PRF_THERMAL_RUN:
         Prefs[PRF_THERMAL_RUN].type=UINT16;
-        Prefs[PRF_THERMAL_RUN].value.uint16=130;
+        Prefs[PRF_THERMAL_RUN].value.uint16=0; // 0 = disabled (minutes); see pidkiln.conf
         break;
       case PRF_ALARM_TIMEOUT:
         Prefs[PRF_ALARM_TIMEOUT].type=UINT16;

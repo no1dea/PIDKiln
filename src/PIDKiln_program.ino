@@ -35,6 +35,10 @@ void IRAM_ATTR onTimer(){
 byte add_program_line(String& linia){
   // Looking for line dddd:dddd:dddd (temperature:time in minutes:time in minutes) - assume max 1350:9999:9999
   PIDKiln_ProgramStep step;
+  if(Program_size>=MAX_PRG_LENGTH){
+    DBG dbgLog(LOG_ERR,"[PRG] Program too long (max %d steps)\n",MAX_PRG_LENGTH);
+    return 5;
+  }
   DBG dbgLog(LOG_DEBUG,"[PRG] Sanitizing line: '%s'\n",linia.c_str());
   int err = PIDKiln_parse_program_line(linia.c_str(), Prefs[PRF_MAX_TEMP].value.uint16, &step);
   if(err) return (byte)err;
@@ -86,7 +90,7 @@ File prg;
         }
       }else{
         // Sanitize every line - if it's have a comment - strip ip, then check if this are only numbers and ":" - otherwise fail
-        if(pos=line.indexOf("#")){
+        if((pos=line.indexOf("#"))>=0){
           line=line.substring(0,pos);
           line.trim(); // trim again after removing comment
         }
@@ -293,7 +297,7 @@ void END_Program(){
 //
 void ABORT_Program(uint8_t error){
 
-  if(Program_run_state==PR_RUNNING || Program_run_state==PR_PAUSED){
+  if(Program_run_state==PR_RUNNING || Program_run_state==PR_PAUSED || Program_run_state==PR_THRESHOLD){
     Program_error=error;
     DBG dbgLog(LOG_INFO,"[PRG] Aborting program with error: %d\n",Program_error);
     END_Program();
@@ -454,6 +458,10 @@ void START_Program(){
 // Check all possible safety measures - if something is wrong - abort
 //
 void SAFETY_Check(){
+  static boolean runaway_watch=false;
+  static time_t runaway_start=0;
+  static double runaway_temp0=0;
+
   if(kiln_temp<Prefs[PRF_MIN_TEMP].value.uint8){
     DBG dbgLog(LOG_ERR,"[PRG] Safety check failed - MIN temperature < %d\n",Prefs[PRF_MIN_TEMP].value.uint8);
     ABORT_Program(PR_ERR_TOO_COLD);
@@ -464,6 +472,26 @@ void SAFETY_Check(){
   if(case_temp>Prefs[PRF_MAX_HOUSING_TEMP].value.uint16){
     DBG dbgLog(LOG_ERR,"[PRG] Safety check failed - MAX housing temperature > %d\n",Prefs[PRF_MAX_HOUSING_TEMP].value.uint16);
     ABORT_Program(PR_ERR_TOO_HOT_HOUSING);
+  }
+
+  // Thermal runaway: while ramping up and setpoint is 5C+ above kiln temp, require +5C rise within N minutes.
+  // Pref units are minutes; 0 disables. Matches data/etc/pidkiln.conf comments.
+  uint16_t run_win=Prefs[PRF_THERMAL_RUN].value.uint16;
+  boolean heating_up=(temp_incr>0.0f) && (set_temp>=(kiln_temp+5.0));
+  if(!run_win || Program_run_state!=PR_RUNNING || !heating_up){
+    runaway_watch=false;
+  }else if(!runaway_watch){
+    runaway_watch=true;
+    runaway_start=time(NULL);
+    runaway_temp0=kiln_temp;
+    DBG dbgLog(LOG_INFO,"[PRG] Thermal runaway watch start at %.1fC window=%umin\n",runaway_temp0,run_win);
+  }else if(kiln_temp>=runaway_temp0+5.0){
+    runaway_start=time(NULL);
+    runaway_temp0=kiln_temp;
+  }else if((time(NULL)-runaway_start)>=(time_t)run_win*60){
+    DBG dbgLog(LOG_ERR,"[PRG] Safety check failed - thermal runaway (no +5C in %umin from %.1fC)\n",run_win,runaway_temp0);
+    runaway_watch=false;
+    ABORT_Program(PR_ERR_THERMAL_RUNAWAY);
   }
 }
 
