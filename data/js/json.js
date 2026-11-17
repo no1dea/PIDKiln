@@ -1,67 +1,96 @@
 const valuesUrl = "/PIDKiln_vars.json";
+const POLL_MS = 5000;
 
-var program_status=0;	// status of the pidkiln program 0-none,1-ready... etc = check pidkiln.h
+var program_status = 0;
+var pollTimer = null;
 
-function dis_bttn(bid){
-  $(bid).attr("disabled", true);
-}
-function ena_bttn(bid){
-  $(bid).attr("disabled", false);
-}
-
-function dis_all_bttn(){
-	dis_bttn("#start_bttn");
-	dis_bttn("#end_bttn");
-	dis_bttn("#pause_bttn");
-	dis_bttn("#abort_bttn");
+function setDisabled(id, disabled) {
+  var el = document.getElementById(id);
+  if (el) el.disabled = disabled;
 }
 
-function change_program_status(ns){
-  console.log("Program status changed on "+ns);
-  if(ns==0){	// program not loaded - disable all buttons
-	dis_all_bttn();
-  }else if(ns==2 || ns==6){	// program running/waiting 4 threshold - enable pause, abort, stop
-	dis_all_bttn();
-	ena_bttn("#pause_bttn");
-	ena_bttn("#end_bttn");
-	ena_bttn("#abort_bttn");
-	if(!chart_update_id) chart_update_id=setTimeout(chart_update, 30000);
-  }else if(ns==3){	// program paused - enable start, abort, stop
-	dis_all_bttn();
-	ena_bttn("#start_bttn");
-	$("#start_bttn").val("Resume program");
-	ena_bttn("#end_bttn");
-	ena_bttn("#abort_bttn");
-	if(!chart_update_id) chart_update_id=setTimeout(chart_update, 30000);
-  }else{		// program ready, stopped, aborted, failed - but loaded, enable start
-	dis_all_bttn();
-	$("#start_bttn").val("Start program");
-	ena_bttn("#start_bttn");
-	clearTimeout(chart_update_id);
+function setButtonValue(id, value) {
+  var el = document.getElementById(id);
+  if (el) el.value = value;
+}
+
+function dis_all_bttn() {
+  setDisabled("start_bttn", true);
+  setDisabled("end_bttn", true);
+  setDisabled("pause_bttn", true);
+  setDisabled("abort_bttn", true);
+}
+
+function change_program_status(ns) {
+  if (ns == 0) {
+    dis_all_bttn();
+  } else if (ns == 2 || ns == 6) {
+    dis_all_bttn();
+    setDisabled("pause_bttn", false);
+    setDisabled("end_bttn", false);
+    setDisabled("abort_bttn", false);
+    if (typeof chart_update_id !== "undefined" && !chart_update_id) {
+      chart_update_id = setTimeout(chart_update, 30000);
+    }
+  } else if (ns == 3) {
+    dis_all_bttn();
+    setDisabled("start_bttn", false);
+    setButtonValue("start_bttn", "Resume program");
+    setDisabled("end_bttn", false);
+    setDisabled("abort_bttn", false);
+    if (typeof chart_update_id !== "undefined" && !chart_update_id) {
+      chart_update_id = setTimeout(chart_update, 30000);
+    }
+  } else {
+    dis_all_bttn();
+    setButtonValue("start_bttn", "Start program");
+    setDisabled("start_bttn", false);
+    if (typeof chart_update_id !== "undefined") {
+      clearTimeout(chart_update_id);
+      chart_update_id = null;
+    }
   }
-  program_status=ns;
+  program_status = ns;
+}
+
+function setFieldValue(selector, value) {
+  var el = document.querySelector(selector);
+  if (!el) return;
+  if ("value" in el && el.tagName !== "OUTPUT") {
+    el.value = value;
+  } else {
+    el.textContent = value;
+  }
 }
 
 function executeQuery() {
- $.ajax({
-   url : valuesUrl,
-   dataType : 'json'
- })
- .done((res) => {
-   if(res.program_status!=program_status) change_program_status(res.program_status);
-
-   res.pidkiln.forEach(el => { $(el.html_id).val(el.value);  })
-
- })
-
- setTimeout(executeQuery, 5000);
+  fetch(valuesUrl, { credentials: "same-origin", cache: "no-store" })
+    .then(function (res) {
+      if (!res.ok) throw new Error("status " + res.status);
+      return res.json();
+    })
+    .then(function (data) {
+      if (data.program_status != program_status) {
+        change_program_status(data.program_status);
+      }
+      if (data.pidkiln && data.pidkiln.forEach) {
+        data.pidkiln.forEach(function (el) {
+          setFieldValue(el.html_id, el.value);
+        });
+      }
+    })
+    .catch(function () {
+      /* keep last values; retry on next poll */
+    })
+    .then(function () {
+      pollTimer = setTimeout(executeQuery, POLL_MS);
+    });
 }
 
+change_program_status(1);
 
-$(document).ready(function() {
-  // run the first time; all subsequent calls will take care of themselves
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", executeQuery);
+} else {
   executeQuery();
-  setTimeout(executeQuery, 5000);
-});
-
-change_program_status(1);   // assume program is ready on start
+}

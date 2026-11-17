@@ -1,128 +1,96 @@
 <!DOCTYPE html>
-<html lang="en"> 
+<html lang="en">
 <head>
- <title>Pidkiln main view</title>
- <link rel="stylesheet" href="css/main.css">
- <link rel="stylesheet" href="css/nav.css">
- <script type="text/javascript" src="js/nav.js"></script>
- <script type="text/javascript" src="js/jquery-3.7.1.min.js"></script>
- <script type="text/javascript" src="js/Chart.2.9.4.bundle.min.js"></script>
- <script type="text/javascript" src="js/chartjs-datasource.min.js"></script>
- <meta name="viewport" content="width=device-width, initial-scale=1">
- <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+ <title>PIDKiln — Main view</title>
+ <link rel="stylesheet" href="/css/main.css">
+ <link rel="stylesheet" href="/css/nav.css">
+ <script src="/js/nav.js"></script>
+ <script src="/js/Chart.2.9.4.bundle.min.js"></script>
+ <script src="/js/chartjs-datasource.min.js"></script>
+ <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+ <meta charset="utf-8">
 </head>
 <body>
 
- <div class="topnav" id="myTopnav">
-  <a href="/index.html" class="active">Main view</a>
+ <nav class="topnav" id="myTopnav" aria-label="Main">
+  <a href="/index.html" class="active" aria-current="page">Main view</a>
   <a href="/programs/index.html">Manage programs</a>
   <a href="/logs/index.html">Logs</a>
   <a href="/preferences.html">Preferences</a>
   <a href="/about.html">About</a>
   <a href="/debug_board.html">Debug ESP</a>
   <a href="/flash_firmware.html">Flash firmware</a>
-  <a href="javascript:void(0);" class="icon" onclick="switch_nav()">
-    <img src="icons/menu.png" alt="...">
-  </a>
- </div>
+  <button type="button" class="nav-toggle" onclick="switch_nav()" aria-label="Open menu">
+    <img src="/icons/menu.png" alt="">
+  </button>
+ </nav>
 
- <div class="container">
-  <form>
-  <div class="column">
-   <fieldset>
-    <legend><h2> Temperatures </h2></legend>
-     <div class="row">
-      <div class="RowX">
-	<p> <label for="kiln_temp"> Kiln </label> </p>
-	<p> <label for="env_temp"> Environment  </label> </p>
-      </div>
-      <div class="RowX">
-	<p> <input class="index" type="text" id="kiln_temp" name="kiln_temp" value="" readonly size="4">&#176;C </p>
-	<p> <input class="index" type="text" id="env_temp" name="env_temp" value="" readonly size="4">&#176;C </p>
-      </div>
-      <div class="RowX" style="width: 2em;">&nbsp;</div>
-      <div class="RowX">
-	<p> <label for="set_temp"> Set </label> </p>
-	<p> <label for="case_temp"> Kiln housing </label> </p>
-      </div>
-      <div class="RowX">
-	<p> <input class="index" type="text" id="set_temp" name="set_temp" value="" readonly size="4">&#176;C </p>
-	<p> <input class="index" type="text" id="case_temp" name="case_temp" value="" readonly size="4">&#176;C </p>
-      </div>
-     </div>
-   </fieldset>
+ <main class="shell dashboard">
+  <h1 class="visually-hidden">PIDKiln main view</h1>
+
+  <section class="hero-metric" aria-label="Kiln temperature">
+   <span class="label">Kiln</span>
+   <output class="value" id="kiln_temp" aria-live="polite">—</output>
+   <span class="unit">°C</span>
+  </section>
+
+  <div class="metrics-grid">
+   <section class="metric-panel" aria-labelledby="temps-heading">
+    <h2 id="temps-heading">Temperatures</h2>
+    <dl class="metric-list">
+     <dt><label for="set_temp">Set</label></dt>
+     <dd><output id="set_temp">—</output> °C</dd>
+     <dt><label for="env_temp">Environment</label></dt>
+     <dd><output id="env_temp">—</output> °C</dd>
+     <dt><label for="case_temp">Housing</label></dt>
+     <dd><output id="case_temp">—</output> °C</dd>
+    </dl>
+   </section>
+
+   <section class="metric-panel" aria-labelledby="timing-heading">
+    <h2 id="timing-heading">Timing</h2>
+    <dl class="metric-list">
+     <dt><label for="prog_start">Start</label></dt>
+     <dd><output id="prog_start">—</output></dd>
+     <dt><label for="prog_end">ETA</label></dt>
+     <dd><output id="prog_end">—</output></dd>
+     <dt><label for="curr_time">Current</label></dt>
+     <dd><output id="curr_time">—</output></dd>
+     <dt><label for="step">Step</label></dt>
+     <dd><output id="step">0 of 0</output></dd>
+    </dl>
+   </section>
+
+   <section class="metric-panel" aria-labelledby="pid-heading">
+    <h2 id="pid-heading">PID</h2>
+    <dl class="metric-list">
+     <dt><label for="heat_time">Heat</label></dt>
+     <dd><output id="heat_time">0</output> %</dd>
+     <dt><label for="temp_change">Ramp</label></dt>
+     <dd><output id="temp_change">0.0</output> °C/s</dd>
+    </dl>
+   </section>
   </div>
 
-  <div class="column">
-   <fieldset>
-    <legend><h2> Timing </h2></legend>
-     <div class="row">
-      <div class="RowX">
-	<p> <label for="prog_start"> Start </label> </p>
-	<p> <label for="prog_end"> ETA  </label> </p>
-      </div>
-      <div class="RowX">
-	<p> <input class="index" type="text" id="prog_start" name="prog_start" value="" readonly size="15"> </p>
-	<p> <input class="index" type="text" id="prog_end" name="prog_end" value="" readonly size="15"> </p>
-      </div>
-      <div class="RowX" style="width: 2em;">&nbsp;</div>
-      <div class="RowX">
-	<p> <label for="curr_time"> Current time </label> </p>
-	<p> <label for="curr_time"> Step </label> </p>
-      </div>
-      <div class="RowX">
-	<p> <input class="index" type="text" id="curr_time" name="curr_time" value="" readonly size="15"> </p>
-	<p> <input class="index" type="text" id="step" name="step" value="0 of 0" readonly size="15"> </p>
-      </div>
-     </div>
-   </fieldset>
-  </div>
-
-  <div class="column">
-   <fieldset>
-    <legend><h2> PID </h2></legend>
-     <div class="row">
-      <div class="RowX">
-	<p> <label for="heat_time"> Heat time </label> </p>
-	<p> <label for="temp_change"> Temp. change </label> </p>
-      </div>
-      <div class="RowX">
-	<p align="left"> <input class="index" type="text" id="heat_time" name="heat_time" value="0" readonly size="4">% </p>
-	<p align="left"> <input class="index" type="text" id="temp_change" name="temp_change" value="0.0" readonly size="4">&#176;C/s </p>
-      </div>
-     </div>
-   </fieldset>
-  </div>
-
-  </form>
- </div>
-
-  <div class="PIDChart" style="width:75%;">
+  <div class="PIDChart">
    <canvas id="ProgramChart"></canvas>
   </div>
 
- <div class="container">
-  <form method="post" action="index.html">
-   <fieldset>
-    <legend> Program control </legend>
-     <div class="for_submit">
-	<input type="submit" id="start_bttn" name="prog_start" value="Start program">
-     </div>
-     <div class="for_submit">
-	<input type="submit" id="pause_bttn" name="prog_pause" value="Pause program">
-     </div>
-     <div class="for_submit">
-	<input type="submit" id="end_bttn" name="prog_end" value="End program">
-     </div>
-     <div class="for_submit">
-	<input type="submit" id="abort_bttn" name="prog_abort" value="Abort program">
-     </div>
-   </fieldset>
-  </form>
- </div>
+  <section class="control-strip" aria-labelledby="control-heading">
+   <h2 id="control-heading">Program control</h2>
+   <form method="post" action="/index.html">
+    <div class="for_submit">
+     <input type="submit" id="start_bttn" name="prog_start" value="Start program">
+     <input type="submit" id="pause_bttn" name="prog_pause" value="Pause program">
+     <input type="submit" id="end_bttn" name="prog_end" value="End program">
+     <input type="submit" id="abort_bttn" name="prog_abort" value="Abort program">
+    </div>
+   </form>
+  </section>
+ </main>
 
- <script type="text/javascript" src="js/chart.js"></script>
- <script type="text/javascript" src="js/json.js"></script>
+ <script src="/js/chart.js"></script>
+ <script src="/js/json.js"></script>
 
 </body>
 </html>

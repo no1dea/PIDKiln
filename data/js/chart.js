@@ -2,13 +2,28 @@ var ctx = document.getElementById('ProgramChart').getContext('2d');
 var chart_update_id;
 
 var chartColors = {
-	red: 'rgb(255, 99, 132)',
-	blue: 'rgb(54, 162, 235)',
-	yel: 'rgb(150, 100, 0)',
-	green: 'rgba(0, 170, 70, 0.1)'
+	red: 'rgb(232, 120, 120)',
+	blue: 'rgb(107, 140, 174)',
+	yel: 'rgb(212, 160, 90)',
+	green: 'rgba(107, 140, 174, 0.18)'
 };
 
-var color = Chart.helpers.color;
+Chart.defaults.global.defaultFontColor = '#9aa0a8';
+Chart.defaults.global.defaultFontFamily = 'ui-monospace, Cascadia Mono, Consolas, monospace';
+
+var axisDefaults = {
+	gridLines: {
+		color: 'rgba(61, 68, 80, 0.9)',
+		zeroLineColor: 'rgba(61, 68, 80, 1)'
+	},
+	ticks: {
+		fontColor: '#9aa0a8'
+	},
+	scaleLabel: {
+		fontColor: '#c8ccd2'
+	}
+};
+
 var config_with = {
 	type: 'line',
 	data: {
@@ -43,9 +58,13 @@ var config_with = {
 	},
 	plugins: [ChartDataSource],
 	options: {
+		legend: {
+			labels: { fontColor: '#c8ccd2' }
+		},
 		title: {
 			display: true,
-			text: 'Set program: ~PROGRAM_NAME~ vs actual temperature'
+			text: 'Set program: ~PROGRAM_NAME~ vs actual temperature',
+			fontColor: '#e8eaed'
 		},
 		responsive: true,
 		scales: {
@@ -58,22 +77,24 @@ var config_with = {
 						second: 'HH:mm:ss',
 						minute: 'HH:mm',
 						hour: 'HH'
-					},
-//					unit: 'minute'
+					}
 				},
+				gridLines: axisDefaults.gridLines,
+				ticks: axisDefaults.ticks,
 				scaleLabel: {
 					display: true,
-					labelString: 'Date'
+					labelString: 'Date',
+					fontColor: axisDefaults.scaleLabel.fontColor
 				}
 			}],
 			yAxes: [{
 				id: 'temperature',
-				gridLines: {
-					display: true
-				},
+				gridLines: axisDefaults.gridLines,
+				ticks: axisDefaults.ticks,
 				scaleLabel: {
 					display: true,
-					labelString: "Temperature (C)"
+					labelString: 'Temperature (C)',
+					fontColor: axisDefaults.scaleLabel.fontColor
 				}
 			},{
 				id: 'watts',
@@ -81,13 +102,15 @@ var config_with = {
 				gridLines: {
 					display: false
 				},
-				scaleLabel: {
-					display: true,
-					labelString: 'Watts'
-				},
 				ticks: {
 					bounds: 'data',
 					beginAtZero: true,
+					fontColor: axisDefaults.ticks.fontColor
+				},
+				scaleLabel: {
+					display: true,
+					labelString: 'Watts',
+					fontColor: axisDefaults.scaleLabel.fontColor
 				}
 			}]
 		},
@@ -119,9 +142,13 @@ var config_without = {
 		}]
 	},
 	options: {
+		legend: {
+			labels: { fontColor: '#c8ccd2' }
+		},
 		title: {
 			display: true,
-			text: 'Ready to run program temperature/time graph'
+			text: 'Ready to run program temperature/time graph',
+			fontColor: '#e8eaed'
 		},
 		responsive: true,
 		scales: {
@@ -134,32 +161,33 @@ var config_without = {
 						second: 'HH:mm:ss',
 						minute: 'HH:mm',
 						hour: 'HH'
-					},
-//					unit: 'minute'
+					}
 				},
+				gridLines: axisDefaults.gridLines,
+				ticks: axisDefaults.ticks,
 				scaleLabel: {
 					display: true,
-					labelString: 'Date'
+					labelString: 'Date',
+					fontColor: axisDefaults.scaleLabel.fontColor
 				}
 			}],
 			yAxes: [{
 				id: 'temperature',
-				gridLines: {
-					display: true
-				},
+				gridLines: axisDefaults.gridLines,
+				ticks: axisDefaults.ticks,
 				scaleLabel: {
 					display: true,
-					labelString: 'Temperature (&deg;C)'
+					labelString: 'Temperature (°C)',
+					fontColor: axisDefaults.scaleLabel.fontColor
 				}
 			}]
-		},
+		}
 	}
 };
 
 var chart = new Chart(ctx, ~CONFIG~);
 
 function chart_update(){
-//  console.log("Updating chart");
   chart.update();
   chart_update_id=setTimeout(chart_update, 30000);
 }

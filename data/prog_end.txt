@@ -1,16 +1,25 @@
-   <tr><th colspan="6"><hr></th></tr>
- </table>
+    </tbody>
+   </table>
 
- <br>
+   <form method="post" action="/upload" enctype="multipart/form-data">
+    <fieldset>
+     <legend>Upload new program</legend>
+     <div class="row">
+      <div class="col-25">
+       <label for="upload_program">Choose a program file</label>
+      </div>
+      <div class="col-75">
+       <input type="file" name="upload" id="upload_program" accept=".txt,.ino" onchange="ValidateSize(this)">
+      </div>
+     </div>
+     <div class="form-actions">
+      <span></span>
+      <input type="submit" value="Upload new program">
+     </div>
+    </fieldset>
+   </form>
 
- <form method='POST' action='/upload' enctype='multipart/form-data'>
-  <fieldset>
-   <legend> Upload new program </legend>
-    <label for"file"> Choose a program file: </label>
-    <input type='file' name='upload' id="upload_program" accept=".txt,.ino" onchange="ValidateSize(this)">
-    <input class="floatr" type='submit' value='Upload new program'>
-  </fieldset>
- </form>
-
- </div>
-</body></html>
+  </div>
+ </main>
+</body>
+</html>
