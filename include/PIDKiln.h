@@ -1,5 +1,7 @@
 #include <PID_v1.h>
 #include <Syslog.h>
+#include <WiFiUdp.h>
+#include <FS.h>
 
 /* 
 ** Some definitions - usually you should not edit this, but you may want to
@@ -9,9 +11,9 @@
 #define ENCODER0_BUTTON  32
 #define ENCODER_BUTTON_DELAY 150  // 150ms between button press readout
 #define ENCODER_ROTATE_DELAY 120  // 120ms between rotate readout
-const uint16_t Long_Press=400; // long press button takes about 0,9 second
+extern const uint16_t Long_Press; // long press button takes about 0,9 second
 
-const int MAX_Prog_File_Size=10240;  // maximum file size (bytes) that can be uploaded as program, this limit is also defined in JS script (js/program.js)
+extern const int MAX_Prog_File_Size;  // maximum file size (bytes) that can be uploaded as program
 
 /*
 ** Relays and thermocouple defs. and other addons
@@ -30,20 +32,18 @@ const int MAX_Prog_File_Size=10240;  // maximum file size (bytes) that can be up
 //#define ENERGY_MON_PIN 33       // if you don't use - comment out
 
 #define ALARM_PIN 26        // Pin goes high on abort
-uint16_t ALARM_countdown=0; // countdown in seconds to stop alarm
+extern uint16_t ALARM_countdown; // countdown in seconds to stop alarm
 
 /*
 ** Temperature, PID and probes variables/definitions
 */
-// Temperature & PID variables
-double int_temp=20, kiln_temp=20, case_temp=20;
-double set_temp, pid_out;
-float temp_incr=0;
-uint32_t windowStartTime;
+extern double int_temp, kiln_temp, case_temp;
+extern double set_temp, pid_out;
+extern float temp_incr;
+extern uint32_t windowStartTime;
 #define PID_WINDOW_DIVIDER 1
 
-//Specify the links and initial tuning parameters
-PID KilnPID(&kiln_temp, &pid_out, &set_temp, 0, 0, 0, P_ON_E, DIRECT);
+extern PID KilnPID;
 
 /*
 ** Global value of LCD screen/menu and menu position
@@ -81,11 +81,11 @@ typedef enum { // menu positions
   M_END
 } LCD_SCR_MENU_Item_enum;
 
-LCD_State_enum LCD_State=SCR_MAIN_VIEW;          // global variable to keep track on where we are in LCD screen
-LCD_MAIN_View_enum LCD_Main=MAIN_VIEW1;          // main screen has some views - where are we
-LCD_SCR_MENU_Item_enum LCD_Menu=M_SCR_MAIN_VIEW; // menu items
+extern LCD_State_enum LCD_State;
+extern LCD_MAIN_View_enum LCD_Main;
+extern LCD_SCR_MENU_Item_enum LCD_Menu;
 
-const char *Menu_Names[] = {"1) Main view", "2) List programs", "3) Quick program", "4) Information", "5) Preferences", "6) Reconnect WiFi", "7) About", "8) Restart"};
+extern const char *Menu_Names[];
 
 typedef enum { // program menu positions
   P_EXIT,
@@ -95,16 +95,16 @@ typedef enum { // program menu positions
   P_end
 } LCD_PSCR_MENU_Item_enum;
 
-const char *Prog_Menu_Names[] = {"Exit","Show","Load","Del."};
-const uint8_t Prog_Menu_Size=4;
+extern const char *Prog_Menu_Names[];
+extern const uint8_t Prog_Menu_Size;
 
 #define SCREEN_W 128   // LCD screen width and height
 #define SCREEN_H 64
 #define MAX_CHARS_PL SCREEN_W/3  // char can have min. 3 points on screen
 
-const uint8_t SCR_MENU_LINES=5;   // how many menu lines should be print
-const uint8_t SCR_MENU_SPACE=2;   // pixels spaces between lines
-const uint8_t SCR_MENU_MIDDLE=3;  // middle of the menu, where choosing will be possible
+extern const uint8_t SCR_MENU_LINES;
+extern const uint8_t SCR_MENU_SPACE;
+extern const uint8_t SCR_MENU_MIDDLE;
 
 /*
 ** Kiln program variables
@@ -118,19 +118,19 @@ struct PROGRAM {
 // maxinum number of program lines (this goes to memory - so be careful)
 #define MAX_PRG_LENGTH 40
 
-PROGRAM Program[MAX_PRG_LENGTH];  // We could use here malloc() but...
-uint8_t Program_size=0;           // number of actual entries in Program
-String Program_desc,Program_name; // First line of the selected program file - it's description
+extern PROGRAM Program[MAX_PRG_LENGTH];
+extern uint8_t Program_size;
+extern String Program_desc,Program_name;
 
-PROGRAM* Program_run;             // running program (made as copy of selected Program)
-uint8_t Program_run_size=0;       // number of entries in running program (since elements count from 0 - this value is actually bigger by 1 then numbers of steps)
-char *Program_run_desc=NULL,*Program_run_name=NULL;
-time_t Program_run_start=0;       // date/time of started program
-time_t Program_run_end=0;         // date/time when program ends - during program it's ETA
-int Program_run_step=-1;          // at which step are we now... (has to be it - so we can give it -1)
-uint16_t Program_start_temp=0;    // temperature on start of the program
-uint8_t Program_error=0;          // if program finished with errors - remember number
-byte TempA_errors=0,TempB_errors=0; // how many temperature read errors we have skipped
+extern PROGRAM* Program_run;
+extern uint8_t Program_run_size;
+extern char *Program_run_desc,*Program_run_name;
+extern time_t Program_run_start;
+extern time_t Program_run_end;
+extern int Program_run_step;
+extern uint16_t Program_start_temp;
+extern uint8_t Program_error;
+extern byte TempA_errors,TempB_errors;
 
 typedef enum { // program menu positions
   PR_NONE,
@@ -142,16 +142,16 @@ typedef enum { // program menu positions
   PR_THRESHOLD,
   PR_end
 } PROGRAM_RUN_STATE;
-PROGRAM_RUN_STATE Program_run_state=PR_NONE; // running program state
-const char *Prog_Run_Names[] = {"unknown","Ready","Running","Paused","Aborted","Ended","Waiting"};
+extern PROGRAM_RUN_STATE Program_run_state;
+extern const char *Prog_Run_Names[];
 
 /* 
 **  Program errors:
 */
 typedef enum {
   PR_ERR_FILE_LOAD,       // failed to load file
-  PR_ERR_TOO_LONG_LINE,   // program line too long (there is error probably in the line - it should be max. 1111:1111:1111 - so 14 chars, if there where more PIDKiln will throw error without checking why
-  PR_ERR_BAD_CHAR,        // not allowed character in program (only allowed characters are numbers and separator ":")
+  PR_ERR_TOO_LONG_LINE,   // program line too long
+  PR_ERR_BAD_CHAR,        // not allowed character in program
   PR_ERR_TOO_HOT,         // exceeded max temperature defined in MAX_Temp
   PR_ERR_TOO_COLD,        // temperature redout below MIN_Temp
   PR_ERR_TOO_HOT_HOUSING, // housing temperature exceeded
@@ -170,41 +170,29 @@ typedef enum {
 ** Filesystem definintions
 **
 */
-#define MAX_FILENAME 30   // soft limit for path+name (kept for UI/upload safety)
-#define MAX_PROGNAME 20   //  - cos we already have /programs/ directory...
+#define MAX_FILENAME 30
+#define MAX_PROGNAME 20
 
-/* Canonical charset lives in PIDKilnLogic; keep symbol for existing call sites. */
 #include <PIDKilnLogic.h>
 #define allowed_chars_in_filename PIDKILN_ALLOWED_FILENAME_CHARS
 
 struct DIRECTORY {
   char filename[MAX_PROGNAME+1];
-  uint16_t filesize=0;
-  uint8_t sel=0;
+  uint16_t filesize;
+  uint8_t sel;
 };
 
-DIRECTORY* Programs_DIR=NULL;
-uint16_t Programs_DIR_size=0;
+extern DIRECTORY* Programs_DIR;
+extern uint16_t Programs_DIR_size;
 
-DIRECTORY* Logs_DIR=NULL;
-uint16_t Logs_DIR_size=0;
+extern DIRECTORY* Logs_DIR;
+extern uint16_t Logs_DIR_size;
 
-/* Directory loading errors:
-** 1 - cant open "/programs" directory
-** 2 - file name is too long or too short (this should not happened)
-** 3 - 
-*/
-
- 
-/* 
-** LittleFS settings (SPIFFS removed for Arduino-ESP32 3.x / 4.x path)
-**
-*/
 #define PRG_DIRECTORY "/programs"
 #define PRG_DIRECTORY_X(x) PRG_DIRECTORY x
-const char *PRG_Directory = PRG_DIRECTORY;  // I started to use it so often... so this will take less RAM then define
+extern const char *PRG_Directory;
 
-const char *LOG_Directory = "/logs";
+extern const char *LOG_Directory;
 
 #define FORMAT_LITTLEFS_IF_FAILED true
 
@@ -213,13 +201,11 @@ const char *LOG_Directory = "/logs";
 */
 #define PREFS_FILE "/etc/pidkiln.conf"
 
-// Other variables
-//
-typedef enum { // program menu positions
+typedef enum {
   PRF_NONE,
   PRF_WIFI_SSID,
   PRF_WIFI_PASS,
-  PRF_WIFI_MODE,      // 0 - connect to AP if failed, be AP; 1 - connect only to AP; 2 - be only AP
+  PRF_WIFI_MODE,
   PRF_WIFI_RETRY_CNT,
   PRF_WIFI_AP_NAME,
   PRF_WIFI_AP_USERNAME,
@@ -263,20 +249,10 @@ typedef enum { // program menu positions
   PRF_end
 } PREFERENCES;
 
-const char *PrefsName[]={
-"None","WiFi_SSID","WiFi_Password","WiFi_Mode","WiFi_Retry_cnt","WiFi_AP_Name","WiFi_AP_Username","WiFi_AP_Pass",
-"HTTP_Local_JS",
-"Auth_Username","Auth_Password",
-"NTP_Server1","NTP_Server2","NTP_Server3","GMT_Offset_sec","Daylight_Offset_sec","Initial_Date","Initial_Time",
-"PID_Window","PID_Kp","PID_Ki","PID_Kd","PID_POE","PID_Temp_Threshold",
-"LOG_Window","LOG_Files_Limit",
-"MIN_Temperature","MAX_Temperature","MAX_Housing_Temperature","Thermal_Runaway","Alarm_Timeout","MAX31855_Error_Grace_Count",
-"DBG_Serial","DBG_Syslog","DBG_Syslog_Srv","DBG_Syslog_Port",
-};
+extern const char *PrefsName[];
 
-// Preferences types definitions
 typedef enum {
- NONE,        // when this value is set - prefs item is off
+ NONE,
  UINT8,
  UINT16,
  INT16,
@@ -285,10 +261,8 @@ typedef enum {
  VFLOAT,
 } TYPE;
 
-
-// Structure for keeping preferences values
 struct PrefsStruct {
-  TYPE type=NONE;
+  TYPE type;
   union {
     uint8_t uint8;
     uint16_t uint16;
@@ -299,19 +273,13 @@ struct PrefsStruct {
   } value;
 };
 
-struct PrefsStruct Prefs[PRF_end];
+extern struct PrefsStruct Prefs[PRF_end];
 
-// Pointer to a log file
-File CSVFile,LOGFile;
+extern File CSVFile,LOGFile;
 
-/*
-** Other stuff
-**
-*/
-const char *PVer = "PIDKiln v1.6";
-const char *PDate = "2026.11.16";
+extern const char *PVer;
+extern const char *PDate;
 
-// DEBUG / MALLOC / REALLOC come from platformio.ini build_flags; defaults for safety.
 #ifndef DEBUG
 #define DEBUG 1
 #endif
@@ -321,23 +289,15 @@ const char *PDate = "2026.11.16";
 #ifndef REALLOC
 #define REALLOC ps_realloc
 #endif
-// If defined debug - do debug, otherwise comment out all debug lines
 #define DBG if(DEBUG)
 
-// Empty syslog instance
-WiFiUDP udpClient;
-Syslog syslog(udpClient, SYSLOG_PROTO_IETF);
-
+extern WiFiUDP udpClient;
+extern Syslog syslog;
 
 #define JS_JQUERY "https://ajax.googleapis.com/ajax/libs/jquery/3.7.1/jquery.min.js"
 #define JS_CHART "https://cdn.jsdelivr.net/npm/chart.js@2.9.4/dist/Chart.bundle.min.js"
 #define JS_CHART_DS "https://cdn.jsdelivr.net/npm/chartjs-plugin-datasource@0.1.0/dist/chartjs-plugin-datasource.min.js"
 
-
-/*
-** Function defs
-**
-*/
 void load_msg(char msg[MAX_CHARS_PL]);
 boolean return_LCD_string(char* msg,char* rest, int mod, uint16_t screen_w=SCREEN_W);
 void LCD_Display_program_summary(int dir=0,byte load_prg=0);
@@ -346,3 +306,8 @@ void LCD_Display_quick_program(int dir=0,byte pos=0);
 uint8_t Cleanup_program(uint8_t err=0);
 uint8_t Load_program(char *file=0);
 void ABORT_Program(uint8_t error=0);
+void Kiln_SetSSR(boolean on);
+void Enable_SSR();
+void Disable_SSR();
+void Enable_EMR();
+void Disable_EMR();

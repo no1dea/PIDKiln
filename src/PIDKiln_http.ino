@@ -193,114 +193,91 @@ String Debug_ESP32(const String& var){
 }
 
 
-// Generates kiln programs index - /programs/index.html
+// Refresh in-memory program list (indexes are generated dynamically over HTTP).
 //
 void Generate_INDEX(){
-String tmp;
-template_str=String();
-
-  File index,tmpf,file;
-
-  if(Load_programs_dir()) return; // can't load directory
-
-  // Open index for writting
-  tmp=String(PRG_Directory)+String("/index.html");
-  if(!(index = LittleFS.open(tmp.c_str(), "w"))){
-    DBG dbgLog(LOG_DEBUG,"[HTTP] Failed to open for writing index.html\n");
-    return;
-  }
-
-  // Copy index head
-  if(tmpf=LittleFS.open("/prog_beg.txt", "r")){
-    DBG dbgLog(LOG_DEBUG,"[HTTP] Head of index - copying...\n");
-    tmp=tmpf.readString();
-    //DBG Serial.println(tmp);
-    index.print(tmp);
-    tmpf.close();
-  }
-
-  for(uint16_t a=0; a<Programs_DIR_size; a++){
-    tmp=String(PRG_Directory)+String("/")+String(Programs_DIR[a].filename);
-    
-    template_str += "<tr><td><img src=\"/icons/heat.png\" alt=\"[ICO]\"></td>";
-    template_str += "<td><a href=\""+tmp+"\" target=\"_blank\">"+String(Programs_DIR[a].filename)+"</a></td>";  
-    template_str += "<td>"+String(Programs_DIR[a].filesize)+"</td>";
-    if(file=LittleFS.open(tmp.c_str(),"r")){
-      template_str += "<td>"+file.readStringUntil('\n')+"</td>";
-      file.close();
-    }else template_str += "<td> Error opening file to read description </td>";
-    template_str += "<td><a href=/load.html?prog_name="+String(Programs_DIR[a].filename)+">load</a></td>";
-    template_str += "<td><a href=/delete.html?prog_name="+String(Programs_DIR[a].filename)+">delete</a></td>";
-    template_str += "</tr>\n";
-  }
-
-  DBG Serial.print(template_str);
-  index.print(template_str);
-  // Copy end of the index template
-  if(tmpf=LittleFS.open("/prog_end.txt", "r")){
-    DBG dbgLog(LOG_DEBUG,"[HTTP] End of index - copying...\n");
-    tmp=tmpf.readString();
-    //DBG Serial.println(tmp);
-    index.print(tmp);
-    tmpf.close();
-  }
-  index.flush();
-  index.close(); 
+  Load_programs_dir();
 }
 
 
-// Generates kiln logs index - /logs.html
+// Refresh in-memory logs list (indexes are generated dynamically over HTTP).
 //
 void Generate_LOGS_INDEX(){
-String tmp;
-template_str=String();
+  Load_LOGS_Dir();
+}
 
-  File index,tmpf,file;
 
-  if(Load_LOGS_Dir()) return; // can't load directory
+static void stream_fs_text(AsyncResponseStream *response, const char *path){
+  File f=LittleFS.open(path,"r");
+  if(!f) return;
+  while(f.available()){
+    uint8_t buf[256];
+    size_t n=f.read(buf, sizeof(buf));
+    if(n) response->write(buf, n);
+  }
+  f.close();
+}
 
-  // Open index for writting
-  tmp=String(LOG_Directory)+String("/index.html");
-  if(!(index = LittleFS.open(tmp.c_str(), "w"))){
-    DBG dbgLog(LOG_DEBUG,"[HTTP] Failed to open for writing log/index.html\n");
+
+// Dynamic /programs/index.html — no LittleFS rewrite of directory listings.
+//
+void handleProgramsIndex(AsyncWebServerRequest *request){
+  if(!_webAuth(request)) return;
+  if(Load_programs_dir()){
+    request->send(500, "text/plain", "Cannot load programs directory");
     return;
   }
-
-  // Copy index head
-  if(tmpf=LittleFS.open("/logs_beg.txt", "r")){
-    DBG dbgLog(LOG_DEBUG,"[HTTP] Head of logs - copying...\n");
-    tmp=tmpf.readString();
-    //DBG Serial.println(tmp);
-    index.print(tmp);
-    tmpf.close();
-  }
-
-  for(uint16_t a=0; a<Logs_DIR_size; a++){
-    //vTaskDelay(50);  // give some time to other processes - watchdog was tripping here often
-    tmp=String(LOG_Directory)+String("/")+String(Logs_DIR[a].filename);
-    
-    template_str += "<td><a href=\""+tmp+"\" target=\"_blank\">"+String(Logs_DIR[a].filename)+"</a></td>";  
-    template_str += "<td>"+String(Logs_DIR[a].filesize)+"</td>";
-    if(tmp.lastIndexOf(".log")>0 && (file=LittleFS.open(tmp.c_str(),"r"))){
-      template_str += "<td>"+file.readStringUntil('\n')+"</td>";
+  AsyncResponseStream *response=request->beginResponseStream("text/html");
+  stream_fs_text(response, "/prog_beg.txt");
+  for(uint16_t a=0; a<Programs_DIR_size; a++){
+    String tmp=String(PRG_Directory)+"/"+String(Programs_DIR[a].filename);
+    response->printf("<tr><td><img src=\"/icons/heat.png\" alt=\"[ICO]\"></td>");
+    response->printf("<td><a href=\"%s\" target=\"_blank\">%s</a></td>", tmp.c_str(), Programs_DIR[a].filename);
+    response->printf("<td>%u</td>", Programs_DIR[a].filesize);
+    File file=LittleFS.open(tmp.c_str(),"r");
+    if(file){
+      String desc=file.readStringUntil('\n');
       file.close();
-    }else template_str += "<td>  </td>";
-    template_str += "</tr>\n";
-    //DBG Serial.print(template_str);
-    index.print(template_str);
-    template_str=String();
+      response->printf("<td>%s</td>", desc.c_str());
+    }else{
+      response->print("<td> Error opening file to read description </td>");
+    }
+    response->printf("<td><a href=/load.html?prog_name=%s>load</a></td>", Programs_DIR[a].filename);
+    response->printf("<td><a href=/delete.html?prog_name=%s>delete</a></td>", Programs_DIR[a].filename);
+    response->print("</tr>\n");
   }
+  stream_fs_text(response, "/prog_end.txt");
+  request->send(response);
+}
 
-  // Copy end of the index template
-  if(tmpf=LittleFS.open("/logs_end.txt", "r")){
-    DBG dbgLog(LOG_DEBUG,"[HTTP] End of log index - copying...\n");
-    tmp=tmpf.readString();
-    //DBG Serial.println(tmp);
-    index.print(tmp);
-    tmpf.close();
+
+// Dynamic /logs/index.html
+//
+void handleLogsIndex(AsyncWebServerRequest *request){
+  if(!_webAuth(request)) return;
+  if(Load_LOGS_Dir()){
+    request->send(500, "text/plain", "Cannot load logs directory");
+    return;
   }
-  index.flush();
-  index.close(); 
+  AsyncResponseStream *response=request->beginResponseStream("text/html");
+  stream_fs_text(response, "/logs_beg.txt");
+  for(uint16_t a=0; a<Logs_DIR_size; a++){
+    String tmp=String(LOG_Directory)+"/"+String(Logs_DIR[a].filename);
+    response->printf("<tr>");
+    response->printf("<td><a href=\"%s\" target=\"_blank\">%s</a></td>", tmp.c_str(), Logs_DIR[a].filename);
+    response->printf("<td>%u</td>", Logs_DIR[a].filesize);
+    if(tmp.lastIndexOf(".log")>0){
+      File file=LittleFS.open(tmp.c_str(),"r");
+      if(file){
+        String desc=file.readStringUntil('\n');
+        file.close();
+        response->printf("<td>%s</td>", desc.c_str());
+      }else response->print("<td>  </td>");
+    }else response->print("<td>  </td>");
+    response->print("</tr>\n");
+  }
+  stream_fs_text(response, "/logs_end.txt");
+  request->send(response);
 }
 
 
@@ -786,9 +763,13 @@ void SETUP_WebServer(void) {
     request->send(LittleFS, "/PIDKiln_vars.json", "application/json", false, handleVars);
   });
 
-  // Set default file for programs to index.html - because webserver was programmed by some Windows @%$$# :/
-  server.serveStatic("/programs/", LittleFS, "/programs/").setDefaultFile("index.html").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
-  server.serveStatic("/logs/", LittleFS, "/logs/").setDefaultFile("index.html").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
+  // Dynamic directory indexes (no rewritten index.html on LittleFS)
+  server.on("/programs/", HTTP_GET, handleProgramsIndex);
+  server.on("/programs/index.html", HTTP_GET, handleProgramsIndex);
+  server.on("/logs/", HTTP_GET, handleLogsIndex);
+  server.on("/logs/index.html", HTTP_GET, handleLogsIndex);
+  server.serveStatic("/programs/", LittleFS, "/programs/").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
+  server.serveStatic("/logs/", LittleFS, "/logs/").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
 
   // Upload new programs
   server.on("/upload", HTTP_POST, [](AsyncWebServerRequest *request){

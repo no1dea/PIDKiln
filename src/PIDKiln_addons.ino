@@ -27,7 +27,7 @@ Adafruit_MAX31855 ThermocoupleB(MAXCS2, ESP32_SPI);
 
 boolean SSR_On; // just to narrow down state changes.. I don't know if this is needed/faster
 
-// Simple functions to enable/disable SSR - for clarity, everything is separate
+// Sole heater SSR writers — call only from Program_Loop / END_Program (single owner).
 //
 void Enable_SSR(){
   if(!SSR_On){
@@ -47,6 +47,12 @@ void Disable_SSR(){
 #endif
     SSR_On=false;
   }
+}
+
+// Explicit ownership API used by the control task
+void Kiln_SetSSR(boolean on){
+  if(on) Enable_SSR();
+  else Disable_SSR();
 }
 
 void Enable_EMR(){

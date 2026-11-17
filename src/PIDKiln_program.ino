@@ -283,7 +283,7 @@ void END_Program(){
   DBG dbgLog(LOG_INFO,"[PRG] Ending program cleanly\n");
   Program_run_state=PR_ENDED;
   KilnPID.SetMode(MANUAL);
-  Disable_SSR();
+  Kiln_SetSSR(false);
   Disable_EMR();
   Program_run_end=time(NULL);
   Close_log_file();
@@ -557,8 +557,8 @@ uint32_t now;
       if (now - windowStartTime > Prefs[PRF_PID_WINDOW].value.uint16){ //time to shift the Relay Window
         windowStartTime += Prefs[PRF_PID_WINDOW].value.uint16;
       }
-      if (pid_out*PID_WINDOW_DIVIDER > now - windowStartTime) Enable_SSR();
-      else Disable_SSR();
+      if (pid_out*PID_WINDOW_DIVIDER > now - windowStartTime) Kiln_SetSSR(true);
+      else Kiln_SetSSR(false);
     }
     //yield();
     vTaskDelay(10); // This should enable to run other tasks on this core

@@ -177,7 +177,7 @@ This is the short version — for hardware assembly see the [Wiki](https://githu
 6. Upload the LittleFS image from `data/`:
    - `pio run -e esp32-wrover -t uploadfs`
 7. For boards without PSRAM use `-e esp32-wroom` instead.
-8. For production, set `-DDEBUG=0` in `platformio.ini` `build_flags` (or remove `-DDEBUG=1`).
+8. For production use `-e esp32-wrover-release` (`DEBUG=0`, less flash).
 
 **Local JS/CSS:** static assets under `data/js` and `data/css` are precompressed (`.gz`) for ESPAsyncWebServer. Large Chart/jQuery libs ship as `.gz` only. After bumping those libs, place the new uncompressed files in `data/js/` and run `scripts/compress_webassets.ps1`.
 
