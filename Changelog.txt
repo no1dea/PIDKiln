@@ -1,4 +1,9 @@
 1.6 (2026.11.17)
+- expand KilnTelemetry snapshot (PID/step/ETA fields); HTTP JSON reads via snapshot only
+- LCD main-view refresh via dirty flag (Program_Loop signals, Input_Loop draws)
+- cut String churn in HTTP dir listings, upload path, chart/vars parsers
+- remove dead WiFi_AP_Username pref (SoftAP uses WiFi_AP_*; HTTP auth uses Auth_*)
+- release env uses partitions/ota_large_app.csv (1408 KiB dual-OTA apps); merge_firmware reads FS offset from CSV
 - modular compile-time features via PK_FEATURE_* + named envs (full/web/local/core); secondary .ino → .cpp
 - split addons into heat/emr/alarm/housing_tc/ssr2/energy; stubs when features off
 - Unity native suites: test_logic, test_safety, test_program (+ CI workflow)

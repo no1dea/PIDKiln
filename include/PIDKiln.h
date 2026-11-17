@@ -178,7 +178,6 @@ typedef enum {
   PRF_WIFI_MODE,
   PRF_WIFI_RETRY_CNT,
   PRF_WIFI_AP_NAME,
-  PRF_WIFI_AP_USERNAME, /* UNUSED by SoftAP; HTTP auth uses Auth_* */
   PRF_WIFI_AP_PASS,
   PRF_HTTP_JS_LOCAL,
   PRF_AUTH_USER,
@@ -350,14 +349,29 @@ void initSysLog();
 void initSerial();
 void Restart_ESP();
 
-/* Telemetry */
+/* Telemetry snapshot — Program_Loop publishes; HTTP (and others) read under spinlock */
 struct KilnTelemetry {
   double kiln_temp;
   double case_temp;
   double int_temp;
   double set_temp;
+  double pid_out;
+  float temp_incr;
+  uint16_t pid_window;
+  uint16_t program_start_temp;
+  int program_run_step;
+  uint8_t program_run_size;
   uint8_t program_run_state;
   uint8_t program_error;
+  time_t program_run_start;
+  time_t program_run_end;
 };
 void Kiln_PublishTelemetry();
 void Kiln_ReadTelemetry(KilnTelemetry *out);
+
+/* LCD refresh requests — Program_Loop signals; Input_Loop draws (keeps UI off control path) */
+#define LCD_REFRESH_NONE 0
+#define LCD_REFRESH_MAIN_V1 1
+#define LCD_REFRESH_MAIN_V2 2
+void Kiln_RequestLcdRefresh(uint8_t which);
+uint8_t Kiln_TakeLcdRefresh(void);

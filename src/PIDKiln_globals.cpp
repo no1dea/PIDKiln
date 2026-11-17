@@ -63,7 +63,7 @@ const char *LOG_Directory = "/logs";
 
 const char *PrefsName[] = {
   "None", "WiFi_SSID", "WiFi_Password", "WiFi_Mode", "WiFi_Retry_cnt", "WiFi_AP_Name",
-  "WiFi_AP_Username", "WiFi_AP_Pass", "HTTP_Local_JS", "Auth_Username", "Auth_Password",
+  "WiFi_AP_Pass", "HTTP_Local_JS", "Auth_Username", "Auth_Password",
   "NTP_Server1", "NTP_Server2", "NTP_Server3", "GMT_Offset_sec", "Daylight_Offset_sec",
   "Initial_Date", "Initial_Time", "PID_Window", "PID_Kp", "PID_Ki", "PID_Kd", "PID_POE",
   "PID_Temp_Threshold", "LOG_Window", "LOG_Files_Limit", "MIN_Temperature", "MAX_Temperature",
@@ -85,6 +85,8 @@ Syslog syslog(udpClient, SYSLOG_PROTO_IETF);
 
 static portMUX_TYPE s_telem_mux = portMUX_INITIALIZER_UNLOCKED;
 static KilnTelemetry s_telem = {};
+static portMUX_TYPE s_lcd_mux = portMUX_INITIALIZER_UNLOCKED;
+static uint8_t s_lcd_refresh = LCD_REFRESH_NONE;
 
 void Kiln_PublishTelemetry() {
   portENTER_CRITICAL(&s_telem_mux);
@@ -92,8 +94,16 @@ void Kiln_PublishTelemetry() {
   s_telem.case_temp = case_temp;
   s_telem.int_temp = int_temp;
   s_telem.set_temp = set_temp;
+  s_telem.pid_out = pid_out;
+  s_telem.temp_incr = temp_incr;
+  s_telem.pid_window = Prefs[PRF_PID_WINDOW].value.uint16;
+  s_telem.program_start_temp = Program_start_temp;
+  s_telem.program_run_step = Program_run_step;
+  s_telem.program_run_size = Program_run_size;
   s_telem.program_run_state = (uint8_t)Program_run_state;
   s_telem.program_error = Program_error;
+  s_telem.program_run_start = Program_run_start;
+  s_telem.program_run_end = Program_run_end;
   portEXIT_CRITICAL(&s_telem_mux);
 }
 
@@ -103,4 +113,22 @@ void Kiln_ReadTelemetry(KilnTelemetry *out) {
   portENTER_CRITICAL(&s_telem_mux);
   *out = s_telem;
   portEXIT_CRITICAL(&s_telem_mux);
+}
+
+void Kiln_RequestLcdRefresh(uint8_t which) {
+  if (which == LCD_REFRESH_NONE)
+    return;
+  portENTER_CRITICAL(&s_lcd_mux);
+  /* Prefer newer request; V2 can overwrite V1 within the same second tick */
+  s_lcd_refresh = which;
+  portEXIT_CRITICAL(&s_lcd_mux);
+}
+
+uint8_t Kiln_TakeLcdRefresh(void) {
+  uint8_t which;
+  portENTER_CRITICAL(&s_lcd_mux);
+  which = s_lcd_refresh;
+  s_lcd_refresh = LCD_REFRESH_NONE;
+  portEXIT_CRITICAL(&s_lcd_mux);
+  return which;
 }

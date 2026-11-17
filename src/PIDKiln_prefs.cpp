@@ -160,10 +160,6 @@ char tmp[30];
         Prefs[PRF_WIFI_AP_NAME].type=STRING;
         Prefs[PRF_WIFI_AP_NAME].value.str=strdup("PIDKiln_AP");
         break;
-      case PRF_WIFI_AP_USERNAME:
-        Prefs[PRF_WIFI_AP_USERNAME].type=STRING;
-        Prefs[PRF_WIFI_AP_USERNAME].value.str=strdup(""); // unused by SoftAP
-        break;
       case PRF_WIFI_AP_PASS:
         Prefs[PRF_WIFI_AP_PASS].type=STRING;
         Prefs[PRF_WIFI_AP_PASS].value.str=strdup("hotashell");

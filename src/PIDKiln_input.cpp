@@ -141,6 +141,14 @@ void Input_Loop(void * parameter) {
       DBG dbgLog(LOG_DEBUG,"[INPUT] Encoder rotated %d\n",encoderValue);
       encoderValue=0;
     }else{
+      // Service LCD redraw requests from Program_Loop (UI stays off control path)
+      uint8_t lcd_req = Kiln_TakeLcdRefresh();
+      if(lcd_req==LCD_REFRESH_MAIN_V1 && LCD_State==SCR_MAIN_VIEW && Program_run_size && LCD_Main==MAIN_VIEW1){
+        LCD_display_mainv1();
+      }else if(lcd_req==LCD_REFRESH_MAIN_V2 && LCD_State==SCR_MAIN_VIEW && LCD_Main==MAIN_VIEW2
+               && (Program_run_state==PR_RUNNING || Program_run_state==PR_PAUSED)){
+        LCD_display_mainv2();
+      }
       // Idle: sleep so we do not busy-spin beside PID on core 0
       vTaskDelay(20 / portTICK_PERIOD_MS);
     }

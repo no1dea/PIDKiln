@@ -531,6 +531,7 @@ uint32_t now;
 #if PK_FEATURE_HOUSING_TC
       if(cnt1==3){  // just to make it in other time then next if cnt1
         Update_TemperatureB();      // this does not have to be updated so often as kiln temp
+        Kiln_PublishTelemetry();
       }
 #endif
 #if PK_FEATURE_ENERGY
@@ -538,9 +539,10 @@ uint32_t now;
         Read_Energy_INPUT();
       }
 #endif
-      // Do Main view screen refreshing if there is a program and if it's running
-      #if PK_FEATURE_LOCAL_UI
-      if(LCD_State==SCR_MAIN_VIEW && Program_run_size && LCD_Main==MAIN_VIEW1) LCD_display_mainv1();
+      // Ask Input_Loop to redraw main views — keep LCD off the control path
+#if PK_FEATURE_LOCAL_UI
+      if(LCD_State==SCR_MAIN_VIEW && Program_run_size && LCD_Main==MAIN_VIEW1)
+        Kiln_RequestLcdRefresh(LCD_REFRESH_MAIN_V1);
 #endif
 
       if(Program_run_state==PR_RUNNING || Program_run_state==PR_PAUSED || Program_run_state==PR_THRESHOLD){
@@ -551,8 +553,9 @@ uint32_t now;
           SAFETY_Check();
         }else if(cnt1==9){
           cnt1=0;
-          #if PK_FEATURE_LOCAL_UI
-          if(LCD_Main==MAIN_VIEW2 && (Program_run_state==PR_RUNNING || Program_run_state==PR_PAUSED)) LCD_display_mainv2();
+#if PK_FEATURE_LOCAL_UI
+          if(LCD_Main==MAIN_VIEW2 && (Program_run_state==PR_RUNNING || Program_run_state==PR_PAUSED))
+            Kiln_RequestLcdRefresh(LCD_REFRESH_MAIN_V2);
 #endif
           DBG dbgLog(LOG_INFO,"[PRG] Pid_out RAW:%.2f Pid_out:%.2f Now-window:%d WindowSize:%d Prg_state:%d\n",pid_out,pid_out*PID_WINDOW_DIVIDER,(now - windowStartTime), Prefs[PRF_PID_WINDOW].value.uint16, (byte)Program_run_state);
         }

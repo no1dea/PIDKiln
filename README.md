@@ -177,7 +177,7 @@ This is the short version — for hardware assembly see the [Wiki](https://githu
 6. Upload the LittleFS image from `data/`:
    - `pio run -e esp32-wrover -t uploadfs`
 7. For boards without PSRAM use `-e esp32-wroom` instead.
-8. For production use `-e esp32-wrover-release` (`DEBUG=0`, less flash).
+8. For production use `-e esp32-wrover-release` (`DEBUG=0`, larger app partitions via `partitions/ota_large_app.csv`). First flash of that env needs a full erase because FS/app offsets differ from `default.csv`.
 
 ### Compile-time feature packs
 
@@ -202,11 +202,14 @@ Firmware sources: sole sketch [`src/PIDKiln.ino`](src/PIDKiln.ino); modules are 
 
 **Arduino-ESP32 4.x:** not validated in this release. Expect a platform URL pin bump in `platformio.ini` plus retest of AsyncTCP, WDT, and OTA.
 
+**Partitions / flash headroom:** debug envs keep Arduino `default.csv` (1280 KiB app0/app1, dual OTA). `esp32-wrover-release` uses [`partitions/ota_large_app.csv`](partitions/ota_large_app.csv) — still dual OTA, app slots 1408 KiB, LittleFS 1152 KiB. Changing partition tables requires erasing the device once; backup programs/`pidkiln.conf` first.
+
 **Known leftovers (unused / historical names, kept for now):**
-- Pref `WiFi_AP_Username` — SoftAP ignores it; HTTP Basic Auth uses `Auth_*`
 - `Generate_INDEX` / `Generate_LOGS_INDEX` — names are historical; they only refresh in-memory directory lists
 - Program/log dir loaders still skip a file named `index.html` (leftover from when indexes were written to the FS)
 - LCD SW-SPI constructor remains commented as an alternate wiring path
+- Chart.js stays on 2.9.4 until `chartjs-plugin-datasource` has a Chart 3/4 path
+- Bench-verify SSR1 on GPIO25, SoftAP prefs, and thermal-runaway abort on real hardware
 
 ### Tests without hardware
 

@@ -1,10 +1,13 @@
-#include <ESPAsyncWebServer.h>
 #include <WiFi.h>
 #include <LittleFS.h>
 #include <soc/efuse_reg.h>
 #include <Esp.h>
 #include <Update.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
 #include "PIDKiln.h"
+#include "PIDKiln_webhost.h"
 #if PK_FEATURE_LOCAL_UI
 #include <U8g2lib.h>
 extern U8G2_ST7920_128X64_F_HW_SPI u8g2;
@@ -13,15 +16,41 @@ extern U8G2_ST7920_128X64_F_HW_SPI u8g2;
 boolean delete_file(File &newFile);
 boolean check_valid_chars(byte a);
 boolean valid_filename(char *file);
-static bool _webAuth(AsyncWebServerRequest *request);
+
+#define server WebHost_Server()
+#define _webAuth WebHost_Auth
 
 // Other variables
 //
-String template_str;  // Stores template pareser output
 char *Errors;         // pointer to string if there are some errors during POST
 
-// Create AsyncWebServer object on port 80
-AsyncWebServer server(80);
+/* Async template callbacks must return String — build once from a stack buffer. */
+static String http_buf(const char *s) {
+  return s ? String(s) : String();
+}
+
+static String http_fmt(const char *fmt, ...) {
+  char buf[160];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+  return String(buf);
+}
+
+static void read_first_line(File &file, char *out, size_t out_len) {
+  if (!out || out_len == 0)
+    return;
+  out[0] = '\0';
+  size_t i = 0;
+  while (file.available() && i + 1 < out_len) {
+    char c = (char)file.read();
+    if (c == '\n' || c == '\r')
+      break;
+    out[i++] = c;
+  }
+  out[i] = '\0';
+}
 
 
 /*
@@ -82,7 +111,7 @@ String Preferences_parser(const String& var){
  else if(var=="DBG_Syslog_Srv") return String(Prefs[PRF_SYSLOG_SRV].value.str);
 
  else if(var=="ERRORS" && Errors){
-  String out="<div class=error> There where errors: "+String(Errors)+"</div>";
+  String out=http_fmt("<div class=error> There where errors: %s</div>", Errors);
   DBG dbgLog(LOG_ERR,"[HTTP] Errors pointer1:%p\n",Errors);
   free(Errors);Errors=NULL;
   return out;
@@ -222,15 +251,17 @@ void handleProgramsIndex(AsyncWebServerRequest *request){
   AsyncResponseStream *response=request->beginResponseStream("text/html");
   stream_fs_text(response, "/prog_beg.txt");
   for(uint16_t a=0; a<Programs_DIR_size; a++){
-    String tmp=String(PRG_Directory)+"/"+String(Programs_DIR[a].filename);
+    char path[64];
+    char desc[128];
+    snprintf(path, sizeof(path), "%s/%s", PRG_Directory, Programs_DIR[a].filename);
     response->printf("<tr><td><img src=\"/icons/heat.png\" alt=\"[ICO]\"></td>");
-    response->printf("<td><a href=\"%s\" target=\"_blank\">%s</a></td>", tmp.c_str(), Programs_DIR[a].filename);
+    response->printf("<td><a href=\"%s\" target=\"_blank\">%s</a></td>", path, Programs_DIR[a].filename);
     response->printf("<td>%u</td>", Programs_DIR[a].filesize);
-    File file=LittleFS.open(tmp.c_str(),"r");
+    File file=LittleFS.open(path,"r");
     if(file){
-      String desc=file.readStringUntil('\n');
+      read_first_line(file, desc, sizeof(desc));
       file.close();
-      response->printf("<td>%s</td>", desc.c_str());
+      response->printf("<td>%s</td>", desc);
     }else{
       response->print("<td> Error opening file to read description </td>");
     }
@@ -254,16 +285,18 @@ void handleLogsIndex(AsyncWebServerRequest *request){
   AsyncResponseStream *response=request->beginResponseStream("text/html");
   stream_fs_text(response, "/logs_beg.txt");
   for(uint16_t a=0; a<Logs_DIR_size; a++){
-    String tmp=String(LOG_Directory)+"/"+String(Logs_DIR[a].filename);
+    char path[64];
+    char desc[128];
+    snprintf(path, sizeof(path), "%s/%s", LOG_Directory, Logs_DIR[a].filename);
     response->printf("<tr>");
-    response->printf("<td><a href=\"%s\" target=\"_blank\">%s</a></td>", tmp.c_str(), Logs_DIR[a].filename);
+    response->printf("<td><a href=\"%s\" target=\"_blank\">%s</a></td>", path, Logs_DIR[a].filename);
     response->printf("<td>%u</td>", Logs_DIR[a].filesize);
-    if(tmp.lastIndexOf(".log")>0){
-      File file=LittleFS.open(tmp.c_str(),"r");
+    if(strstr(Logs_DIR[a].filename, ".log")){
+      File file=LittleFS.open(path,"r");
       if(file){
-        String desc=file.readStringUntil('\n');
+        read_first_line(file, desc, sizeof(desc));
         file.close();
-        response->printf("<td>%s</td>", desc.c_str());
+        response->printf("<td>%s</td>", desc);
       }else response->print("<td>  </td>");
     }else response->print("<td>  </td>");
     response->print("</tr>\n");
@@ -276,40 +309,38 @@ void handleLogsIndex(AsyncWebServerRequest *request){
 // Template preprocessor for chart.js
 //
 String Chart_parser(const String& var) {
-String tmp;
-time_t current_time;
-char *str;
+  KilnTelemetry telem;
+  Kiln_ReadTelemetry(&telem);
+  time_t current_time = telem.program_run_start ? telem.program_run_start : time(NULL);
+  char *str;
+  char point[96];
 
-  tmp=String();
-  if(Program_run_start) current_time=Program_run_start;
-  else current_time=time(NULL);
-
-  if(var == "CHART_DATA" && Program_run_size>0){
-    str=ctime(&current_time);str[strlen(str)-1]='\0';  // Dont know why - probably error, but ctime returns string with new line char and tab - so we cut it off
-    tmp+="{x:'"+String(str)+"'";
-    if(Program_start_temp) tmp+=",y:"+String(Program_start_temp)+"},";
-    else tmp+=",y:"+String(kiln_temp)+"},";
-    for(uint16_t a=0;a<Program_run_size;a++){
-       if(a>0) tmp+=",";
+  if(var == "CHART_DATA" && telem.program_run_size>0 && Program_run){
+    String tmp;
+    tmp.reserve((size_t)telem.program_run_size * 96u + 128u);
+    str=ctime(&current_time);str[strlen(str)-1]='\0';
+    snprintf(point, sizeof(point), "{x:'%s',y:%.1f},", str,
+             telem.program_start_temp ? (double)telem.program_start_temp : telem.kiln_temp);
+    tmp += point;
+    for(uint16_t a=0; a<telem.program_run_size && a<Program_run_size; a++){
+       if(a>0) tmp += ',';
        current_time+=Program_run[a].togo*60;
-       str=ctime(&current_time);str[strlen(str)-1]='\0';  // Dont know why - probably error, but ctime returns string with new line char and tab - so we cut the tab
-       //DBG Serial.printf("Seconds:%d \t Parsed:'%s'\n",current_time,str);
-       tmp+="{x:'"+String(str)+"'";
-       tmp+=",y:"+String(Program_run[a].temp)+"},";
+       str=ctime(&current_time);str[strlen(str)-1]='\0';
+       snprintf(point, sizeof(point), "{x:'%s',y:%u},", str, Program_run[a].temp);
+       tmp += point;
        current_time+=Program_run[a].dwell*60;
        str=ctime(&current_time);str[strlen(str)-1]='\0';
-       tmp+="{x:'"+String(str)+"'";
-       tmp+=",y:"+String(Program_run[a].temp)+"}";
+       snprintf(point, sizeof(point), "{x:'%s',y:%u}", str, Program_run[a].temp);
+       tmp += point;
     }
     return tmp;
   }else if(var == "LOG_FILE"){
-    if(CSVFile) return CSVFile.path();
-    else return String("/logs/test.csv");
+    if(CSVFile) return http_buf(CSVFile.path());
+    return String("/logs/test.csv");
   }else if(var == "PROGRAM_NAME"){
-    return String(Program_run_name);
-  }else if(var == "CONFIG"){        // if we have log fie to show - show it on graph, otherwise show just program graph
-    if(CSVFile) return String("config_with");
-    else return String("config_without");
+    return http_buf(Program_run_name);
+  }else if(var == "CONFIG"){
+    return String(CSVFile ? "config_with" : "config_without");
   }
   return String();
 }
@@ -318,18 +349,10 @@ char *str;
 // Template preprocessor for main view - index.html, about and perhaps others
 //
 String About_parser(const String& var) {
-String tmp;
-
-  template_str=String();
   DBG dbgLog(LOG_DEBUG,var.c_str());
-  if (var == "VERSION"){
-    template_str+=PVer;
-    template_str+=" ";
-    template_str+=PDate;
-  }
-  
-  DBG dbgLog(LOG_DEBUG,template_str.c_str());
-  return template_str;
+  if (var == "VERSION")
+    return http_fmt("%s %s", PVer, PDate);
+  return String();
 }
 
 
@@ -338,11 +361,7 @@ String tmp;
 void handleUpload(AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
 static File newFile;
 static boolean abort=false;
-String tmp=String(PRG_Directory);
-
-
-  tmp.concat("/");
-  tmp.concat(filename.c_str());
+static char upload_path[MAX_FILENAME + 1];
 
   // Abort file upload if file is too large or there are some not allowed characters in program
   if(abort){
@@ -356,50 +375,60 @@ String tmp=String(PRG_Directory);
   // Checking how much has been uploaded - if more then MAX_Prog_File_Size - abort
   if(len+index>MAX_Prog_File_Size){
      DBG dbgLog(LOG_DEBUG,"[HTTP] Uploaded file too large! Aborting\n");
-     request->send(406, "text/html", "<html><body><h1>File is too large!</h1> Current limit is "+String(MAX_Prog_File_Size)+"<br><br><a href=/>Return to main view</a></body></html");
+     request->send(406, "text/html", http_fmt(
+       "<html><body><h1>File is too large!</h1> Current limit is %d<br><br><a href=/>Return to main view</a></body></html",
+       MAX_Prog_File_Size));
      abort=true;
      return;
   }
     
   if(!index){
-    DBG dbgLog(LOG_INFO,"UploadStart: %s\n", tmp.c_str() );
+    snprintf(upload_path, sizeof(upload_path), "%s/%s", PRG_Directory, filename.c_str());
+    DBG dbgLog(LOG_INFO,"UploadStart: %s\n", upload_path);
     
     // Check if declared file size in header is not too large
     if(request->hasHeader("Content-Length")){
       const AsyncWebHeader* h = request->getHeader("Content-Length");
       if(h->value().toInt()>MAX_Prog_File_Size){
         DBG dbgLog(LOG_DEBUG,"[HTTP] Uploaded file too large! Aborting\n");
-        request->send(406, "text/html", "<html><body><h1>File is too large!</h1> Current limit is "+String(MAX_Prog_File_Size)+"<br><br><a href=/programs/>Return to programs view</a></body></html");
+        request->send(406, "text/html", http_fmt(
+          "<html><body><h1>File is too large!</h1> Current limit is %d<br><br><a href=/programs/>Return to programs view</a></body></html",
+          MAX_Prog_File_Size));
         abort=true;
         return;
       }
     }
 
     // Abort if filename is too long (otherwise esp will not write file to LittleFS silently!)
-    if(tmp.length()>MAX_FILENAME){
+    if(strlen(upload_path)>MAX_FILENAME){
       DBG dbgLog(LOG_DEBUG,"[HTTP] Uploaded filename is too large! Aborting\n");
-      request->send(406, "text/html", "<html><body><h1>Filename is too long!</h1> Current limit is "+String(MAX_FILENAME)+"letters for directory and filename, so program name can be only "+String(MAX_PROGNAME)+" <br><br><a href=/programs/>Return to programs view</a></body></html");
+      request->send(406, "text/html", http_fmt(
+        "<html><body><h1>Filename is too long!</h1> Current limit is %d letters for directory and filename, so program name can be only %d <br><br><a href=/programs/>Return to programs view</a></body></html",
+        MAX_FILENAME, MAX_PROGNAME));
       abort=true;
       return;
     }
 
     char tmp_filename[MAX_PROGNAME];
-    strcpy(tmp_filename,filename.c_str());
+    strncpy(tmp_filename, filename.c_str(), sizeof(tmp_filename) - 1);
+    tmp_filename[sizeof(tmp_filename) - 1] = '\0';
     // Abort if filename contains not allowed characters or trys to overwrite index.html
     if(!valid_filename(tmp_filename) || filename.compareTo("index.html")==0){
       DBG dbgLog(LOG_DEBUG,"[HTTP] Uploaded filename containg bad characters! Aborting\n");
-      request->send(406, "text/html", "<html><body><h1>Filename is bad!</h1> Filename contains not allowed characters - use letters, numbers and . _ signs <br><br><a href=/programs/>Return to programs view</a></body></html");
+      request->send(406, "text/html",
+        "<html><body><h1>Filename is bad!</h1> Filename contains not allowed characters - use letters, numbers and . _ signs <br><br><a href=/programs/>Return to programs view</a></body></html");
       abort=true;
       return;
     }
     
     if (newFile) newFile.close();
-    newFile = LittleFS.open( tmp.c_str(), "w");
+    newFile = LittleFS.open(upload_path, "w");
   }
   DBG dbgLog(LOG_DEBUG,"[HTTP] Next iteration of file upload...\n");
   for(size_t i=0; i<len; i++){
     if(!check_valid_chars(data[i])){ // Basic sanitization - check for allowed characters
-      request->send(200, "text/html", "<html><body><h1>File contains not allowed character(s)!</h1> You can use all letters, numbers and basic symbols in ASCII code.<br><br><a href=/>Return to main view</a></body></html");
+      request->send(200, "text/html",
+        "<html><body><h1>File contains not allowed character(s)!</h1> You can use all letters, numbers and basic symbols in ASCII code.<br><br><a href=/>Return to main view</a></body></html");
       delete_file(newFile);
       DBG dbgLog(LOG_ERR,"[HTTP] Basic program check failed!\n");
       abort=true;
@@ -412,13 +441,16 @@ String tmp=String(PRG_Directory);
     newFile.close();
 
     char fname[22];
-    strcpy(fname,filename.c_str());
+    strncpy(fname, filename.c_str(), sizeof(fname) - 1);
+    fname[sizeof(fname) - 1] = '\0';
     DBG dbgLog(LOG_INFO,"[HTTP] Checking uploaded program structure: '%s'\n",fname); 
     uint8_t err=Load_program(fname);
     
     if(err){  // program did not validate correctly
-      request->send(200, "text/html", "<html><body><h1>Program stucture is incorrect!</h1> Error code "+String(err)+".<br><br><a href=/programs/>Return to programs</a></body></html");
-      delete_file(newFile=LittleFS.open( tmp.c_str(), "r"));  // we need to open file again - to close it with already existing function
+      request->send(200, "text/html", http_fmt(
+        "<html><body><h1>Program stucture is incorrect!</h1> Error code %u.<br><br><a href=/programs/>Return to programs</a></body></html",
+        err));
+      delete_file(newFile=LittleFS.open(upload_path, "r"));  // open again to close via existing helper
       DBG dbgLog(LOG_ERR,"[HTTP] Detailed program check failed!\n");
       abort=true; // this will never happend...
       request->redirect("/programs");
@@ -458,7 +490,7 @@ void POST_Handle_Delete(AsyncWebServerRequest *request){
 //
 void GET_Handle_Delete(AsyncWebServerRequest *request){
 File tmpf;
-String tmps;
+char line[256];
 
   DBG dbgLog(LOG_DEBUG,"[HTTP]  Request type: %d\n",request->method());
   DBG dbgLog(LOG_DEBUG,"[HTTP]  Request url: %s\n",request->url().c_str());
@@ -470,17 +502,28 @@ String tmps;
   }
  
   const AsyncWebParameter* p = request->getParam("prog_name");
+  const char *prog = p->value().c_str();
   
   AsyncResponseStream *response = request->beginResponseStream("text/html");
   response->addHeader("Server","ESP Async Web Server");
 
-  DBG dbgLog(LOG_DEBUG,"[HTTP] Opened file is %s, program name is:%s\n",tmpf.path(),p->value().c_str());
+  DBG dbgLog(LOG_DEBUG,"[HTTP] Opened file is %s, program name is:%s\n",tmpf.path(),prog);
   
   while(tmpf.available()){
-    tmps=tmpf.readStringUntil('\n');
-    tmps.replace("~PROGRAM_NAME~",p->value());
-    //DBG Serial.printf("-:%s:\n",tmps.c_str());
-    response->println(tmps.c_str());
+    read_first_line(tmpf, line, sizeof(line));
+    char *ph = strstr(line, "~PROGRAM_NAME~");
+    if(ph){
+      char out[256];
+      size_t head = (size_t)(ph - line);
+      if(head >= sizeof(out)) head = sizeof(out) - 1;
+      memcpy(out, line, head);
+      out[head] = '\0';
+      strncat(out, prog, sizeof(out) - strlen(out) - 1);
+      strncat(out, ph + strlen("~PROGRAM_NAME~"), sizeof(out) - strlen(out) - 1);
+      response->println(out);
+    }else{
+      response->println(line);
+    }
   }
 
   tmpf.close();
@@ -585,41 +628,49 @@ int params = request->params();
 // Handle json vars for js
 //
 String handleVars(const String& var){
-char str[30];
+char str[48];
 struct tm timeinfo, *tmm;
 KilnTelemetry telem;
 Kiln_ReadTelemetry(&telem);
 
-  if(var=="KILN_TEMP") return String(telem.kiln_temp);
-  else if(var=="SET_TEMP") return String(telem.set_temp);
-  else if(var=="ENV_TEMP") return String(telem.int_temp);
-  else if(var=="CASE_TEMP") return String(telem.case_temp);
-  else if(var=="HEAT_TIME") return String((pid_out/Prefs[PRF_PID_WINDOW].value.uint16)*100*PID_WINDOW_DIVIDER);
-  else if(var=="TEMP_CHANGE") return String(temp_incr);
+  if(var=="KILN_TEMP") return http_fmt("%.2f", telem.kiln_temp);
+  else if(var=="SET_TEMP") return http_fmt("%.2f", telem.set_temp);
+  else if(var=="ENV_TEMP") return http_fmt("%.2f", telem.int_temp);
+  else if(var=="CASE_TEMP") return http_fmt("%.2f", telem.case_temp);
+  else if(var=="HEAT_TIME"){
+    double pct = 0;
+    if(telem.pid_window)
+      pct = (telem.pid_out / (double)telem.pid_window) * 100.0 * PID_WINDOW_DIVIDER;
+    return http_fmt("%.2f", pct);
+  }
+  else if(var=="TEMP_CHANGE") return http_fmt("%.3f", (double)telem.temp_incr);
   else if(var=="STEP"){
-    if(telem.program_run_state==PR_RUNNING){
-      if(temp_incr==0) strcpy(str,"Dwell");
-      else strcpy(str,"Running");
-    }else strcpy(str,Prog_Run_Names[telem.program_run_state]);
-    return String(Program_run_step+1)+" of "+String(Program_run_size)+" - "+String(str);
+    const char *label;
+    if(telem.program_run_state==PR_RUNNING)
+      label = (telem.temp_incr==0) ? "Dwell" : "Running";
+    else if(telem.program_run_state < PR_end)
+      label = Prog_Run_Names[telem.program_run_state];
+    else
+      label = "unknown";
+    return http_fmt("%d of %u - %s", telem.program_run_step+1, telem.program_run_size, label);
   }
   else if(var=="CURR_TIME"){
     if(getLocalTime(&timeinfo)){
-      strftime (str, 29, "%F %T", &timeinfo);
-      return String(str);
+      strftime(str, sizeof(str), "%F %T", &timeinfo);
+      return http_buf(str);
     }
-  }else if(var=="PROG_START" && Program_run_start){
-    tmm = localtime(&Program_run_start);
-    strftime (str, 29, "%F %T", tmm);
-    return String(str);
-  }else if(var=="PROG_END" && Program_run_end){
-    tmm = localtime(&Program_run_end);
-    strftime (str, 29, "%F %T", tmm);
-    return String(str);
+  }else if(var=="PROG_START" && telem.program_run_start){
+    tmm = localtime(&telem.program_run_start);
+    strftime(str, sizeof(str), "%F %T", tmm);
+    return http_buf(str);
+  }else if(var=="PROG_END" && telem.program_run_end){
+    tmm = localtime(&telem.program_run_end);
+    strftime(str, sizeof(str), "%F %T", tmm);
+    return http_buf(str);
   }else if(var=="LOG_FILE"){
-    if(CSVFile) return CSVFile.path();
-    else return String("/logs/test.csv");
-  }if(var=="PROGRAM_STATUS") return String(Program_run_state);
+    if(CSVFile) return http_buf(CSVFile.path());
+    return String("/logs/test.csv");
+  }if(var=="PROGRAM_STATUS") return http_fmt("%u", telem.program_run_state);
   else return String(" "); 
 }
 
@@ -685,19 +736,8 @@ void handleDoUpdate(AsyncWebServerRequest *request, const String& filename, size
 }
 
 
-// Basic WEB authentication
-//
-static bool _webAuth(AsyncWebServerRequest *request){
-    if(!request->authenticate(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str,NULL,false)) {
-      request->requestAuthentication(NULL,false); // force basic auth
-      return false;
-    }
-    return true;
-}
-
-
 /* 
-** Setup Webserver screen 
+** Setup Webserver UI routes (server begin is WebHost_Begin from net).
 **
 */
 void SETUP_WebServer(void) {
@@ -808,19 +848,7 @@ void SETUP_WebServer(void) {
   server.serveStatic("/css/", LittleFS, "/css/").setCacheControl("max-age=86400");
   // Do not serve PREFS_FILE over HTTP — it contains WiFi/auth secrets.
   server.serveStatic("/favicon.ico", LittleFS, "/icons/heat.png");
-
-  server.onNotFound([](AsyncWebServerRequest *request){
-    //request->send(404);
-    request->send(404, "text/plain", "File not found");
-  });
-
-  // Start server
-  server.begin();
 }
 
 
-// Stop/disable web server
-//
-void STOP_WebServer(){
-  server.end();
-}
+void STOP_WebServer() { WebHost_End(); }

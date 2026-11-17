@@ -65,7 +65,6 @@ boolean Start_WiFi_AP(){
      && strlen(Prefs[PRF_WIFI_AP_PASS].value.str)>=8){
     ap_pass = Prefs[PRF_WIFI_AP_PASS].value.str;
   }
-  // UNUSED: WiFi_AP_Username pref is ignored by SoftAP (HTTP Basic Auth uses Auth_*).
 
   DBG dbgLog(LOG_INFO,"[NET] Creating WiFi Access Point (AP)%s\n", ap_name);
   WiFi.softAP(ap_name, ap_pass, 8);
