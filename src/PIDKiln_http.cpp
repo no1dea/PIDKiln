@@ -228,80 +228,231 @@ String Debug_ESP32(const String& var){
 }
 
 
-static void stream_fs_text(AsyncResponseStream *response, const char *path){
-  File f=LittleFS.open(path,"r");
-  if(!f) return;
-  while(f.available()){
-    uint8_t buf[256];
-    size_t n=f.read(buf, sizeof(buf));
-    if(n) response->write(buf, n);
+/* Single LittleFS HTML templates with <!--PIDKILN_ROWS--> injection point. */
+static const char *ROWS_MARKER = "<!--PIDKILN_ROWS-->";
+
+static void html_escape_write(AsyncResponseStream *response, const char *s) {
+  if (!s)
+    return;
+  for (; *s; ++s) {
+    switch (*s) {
+    case '&':
+      response->print("&amp;");
+      break;
+    case '<':
+      response->print("&lt;");
+      break;
+    case '>':
+      response->print("&gt;");
+      break;
+    case '"':
+      response->print("&quot;");
+      break;
+    case '\'':
+      response->print("&#39;");
+      break;
+    default:
+      response->print(*s);
+      break;
+    }
   }
-  f.close();
 }
 
-
-// Dynamic /programs/index.html — no LittleFS rewrite of directory listings.
-//
-void handleProgramsIndex(AsyncWebServerRequest *request){
-  if(!_webAuth(request)) return;
-  if(Load_programs_dir()){
-    request->send(500, "text/plain", "Cannot load programs directory");
-    return;
+static String html_escape_string(const char *s) {
+  String out;
+  if (!s)
+    return out;
+  for (; *s; ++s) {
+    switch (*s) {
+    case '&':
+      out += F("&amp;");
+      break;
+    case '<':
+      out += F("&lt;");
+      break;
+    case '>':
+      out += F("&gt;");
+      break;
+    case '"':
+      out += F("&quot;");
+      break;
+    case '\'':
+      out += F("&#39;");
+      break;
+    default:
+      out += *s;
+      break;
+    }
   }
-  AsyncResponseStream *response=request->beginResponseStream("text/html");
-  stream_fs_text(response, "/prog_beg.txt");
-  for(uint16_t a=0; a<Programs_DIR_size; a++){
+  return out;
+}
+
+/* Marker has no self-overlap; restart on mismatch is safe. */
+static bool find_marker_offset(const char *path, const char *marker, size_t *at) {
+  File f = LittleFS.open(path, "r");
+  if (!f)
+    return false;
+  size_t mlen = strlen(marker);
+  size_t match = 0;
+  size_t idx = 0;
+  while (f.available()) {
+    char c = (char)f.read();
+    if (c == marker[match]) {
+      match++;
+      if (match == mlen) {
+        *at = idx + 1 - mlen;
+        f.close();
+        return true;
+      }
+    } else if (c == marker[0]) {
+      match = 1;
+    } else {
+      match = 0;
+    }
+    idx++;
+  }
+  f.close();
+  return false;
+}
+
+static bool stream_fs_range(AsyncResponseStream *response, const char *path,
+                            size_t start, size_t length) {
+  File f = LittleFS.open(path, "r");
+  if (!f)
+    return false;
+  if (start && !f.seek(start)) {
+    f.close();
+    return false;
+  }
+  uint8_t buf[256];
+  while (length) {
+    size_t chunk = length > sizeof(buf) ? sizeof(buf) : length;
+    size_t n = f.read(buf, chunk);
+    if (!n)
+      break;
+    response->write(buf, n);
+    length -= n;
+  }
+  f.close();
+  return true;
+}
+
+static bool stream_fs_after(AsyncResponseStream *response, const char *path,
+                            size_t start) {
+  File f = LittleFS.open(path, "r");
+  if (!f)
+    return false;
+  size_t sz = f.size();
+  f.close();
+  if (start > sz)
+    return false;
+  return stream_fs_range(response, path, start, sz - start);
+}
+
+typedef void (*listing_rows_fn)(AsyncResponseStream *response);
+
+static bool stream_listing_template(AsyncResponseStream *response, const char *path,
+                                    listing_rows_fn emit_rows) {
+  size_t at = 0;
+  size_t mlen = strlen(ROWS_MARKER);
+  if (!find_marker_offset(path, ROWS_MARKER, &at))
+    return false;
+  if (!stream_fs_range(response, path, 0, at))
+    return false;
+  if (emit_rows)
+    emit_rows(response);
+  return stream_fs_after(response, path, at + mlen);
+}
+
+static void write_program_rows(AsyncResponseStream *response) {
+  for (uint16_t a = 0; a < Programs_DIR_size; a++) {
     char path[64];
     char desc[128];
     snprintf(path, sizeof(path), "%s/%s", PRG_Directory, Programs_DIR[a].filename);
-    response->printf("<tr><td><img src=\"/icons/heat.png\" alt=\"[ICO]\"></td>");
-    response->printf("<td><a href=\"%s\" target=\"_blank\">%s</a></td>", path, Programs_DIR[a].filename);
-    response->printf("<td>%u</td>", Programs_DIR[a].filesize);
-    File file=LittleFS.open(path,"r");
-    if(file){
+    response->print(F("<tr><td><img src=\"/icons/heat.png\" alt=\"\"></td><td><a href=\""));
+    html_escape_write(response, path);
+    response->print(F("\" target=\"_blank\">"));
+    html_escape_write(response, Programs_DIR[a].filename);
+    response->print(F("</a></td><td>"));
+    response->printf("%u", Programs_DIR[a].filesize);
+    response->print(F("</td><td>"));
+    File file = LittleFS.open(path, "r");
+    if (file) {
       read_first_line(file, desc, sizeof(desc));
       file.close();
-      response->printf("<td>%s</td>", desc);
-    }else{
-      response->print("<td> Error opening file to read description </td>");
+      html_escape_write(response, desc);
+    } else {
+      response->print(F("Error opening file to read description"));
     }
-    response->printf("<td><a href=/load.html?prog_name=%s>load</a></td>", Programs_DIR[a].filename);
-    response->printf("<td><a href=/delete.html?prog_name=%s>delete</a></td>", Programs_DIR[a].filename);
-    response->print("</tr>\n");
+    response->print(F("</td><td><a href=\"/load.html?prog_name="));
+    html_escape_write(response, Programs_DIR[a].filename);
+    response->print(F("\">load</a></td><td><a href=\"/delete.html?prog_name="));
+    html_escape_write(response, Programs_DIR[a].filename);
+    response->print(F("\">delete</a></td></tr>\n"));
   }
-  stream_fs_text(response, "/prog_end.txt");
-  request->send(response);
 }
 
-
-// Dynamic /logs/index.html
-//
-void handleLogsIndex(AsyncWebServerRequest *request){
-  if(!_webAuth(request)) return;
-  if(Load_LOGS_Dir()){
-    request->send(500, "text/plain", "Cannot load logs directory");
-    return;
-  }
-  AsyncResponseStream *response=request->beginResponseStream("text/html");
-  stream_fs_text(response, "/logs_beg.txt");
-  for(uint16_t a=0; a<Logs_DIR_size; a++){
+static void write_log_rows(AsyncResponseStream *response) {
+  for (uint16_t a = 0; a < Logs_DIR_size; a++) {
     char path[64];
     char desc[128];
     snprintf(path, sizeof(path), "%s/%s", LOG_Directory, Logs_DIR[a].filename);
-    response->printf("<tr>");
-    response->printf("<td><a href=\"%s\" target=\"_blank\">%s</a></td>", path, Logs_DIR[a].filename);
-    response->printf("<td>%u</td>", Logs_DIR[a].filesize);
-    if(strstr(Logs_DIR[a].filename, ".log")){
-      File file=LittleFS.open(path,"r");
-      if(file){
+    response->print(F("<tr><td><a href=\""));
+    html_escape_write(response, path);
+    response->print(F("\" target=\"_blank\">"));
+    html_escape_write(response, Logs_DIR[a].filename);
+    response->print(F("</a></td><td>"));
+    response->printf("%u", Logs_DIR[a].filesize);
+    response->print(F("</td><td>"));
+    if (strstr(Logs_DIR[a].filename, ".log")) {
+      File file = LittleFS.open(path, "r");
+      if (file) {
         read_first_line(file, desc, sizeof(desc));
         file.close();
-        response->printf("<td>%s</td>", desc);
-      }else response->print("<td>  </td>");
-    }else response->print("<td>  </td>");
-    response->print("</tr>\n");
+        html_escape_write(response, desc);
+      }
+    }
+    response->print(F("</td></tr>\n"));
   }
-  stream_fs_text(response, "/logs_end.txt");
+}
+
+// Dynamic /programs/index.html — stream template + inject rows (no FS rewrite).
+//
+void handleProgramsIndex(AsyncWebServerRequest *request) {
+  if (!_webAuth(request))
+    return;
+  if (Load_programs_dir()) {
+    request->send(500, "text/plain", "Cannot load programs directory");
+    return;
+  }
+  size_t marker_at = 0;
+  if (!find_marker_offset("/programs/index.html", ROWS_MARKER, &marker_at)) {
+    request->send(500, "text/plain",
+                  "Missing or invalid /programs/index.html (need <!--PIDKILN_ROWS-->)");
+    return;
+  }
+  AsyncResponseStream *response = request->beginResponseStream("text/html");
+  stream_listing_template(response, "/programs/index.html", write_program_rows);
+  request->send(response);
+}
+
+// Dynamic /logs/index.html
+//
+void handleLogsIndex(AsyncWebServerRequest *request) {
+  if (!_webAuth(request))
+    return;
+  if (Load_LOGS_Dir()) {
+    request->send(500, "text/plain", "Cannot load logs directory");
+    return;
+  }
+  size_t marker_at = 0;
+  if (!find_marker_offset("/logs/index.html", ROWS_MARKER, &marker_at)) {
+    request->send(500, "text/plain",
+                  "Missing or invalid /logs/index.html (need <!--PIDKILN_ROWS-->)");
+    return;
+  }
+  AsyncResponseStream *response = request->beginResponseStream("text/html");
+  stream_listing_template(response, "/logs/index.html", write_log_rows);
   request->send(response);
 }
 
@@ -462,72 +613,53 @@ static char upload_path[MAX_FILENAME + 1];
 }
 
 
+/* Filled by GET_Handle_Delete for ~PROGRAM_NAME~ substitution. */
+static char g_delete_prog_name[MAX_PROGNAME + 1];
+
+String Delete_parser(const String &var) {
+  if (var == "PROGRAM_NAME")
+    return html_escape_string(g_delete_prog_name);
+  return String();
+}
+
 // Handle delete - second run, post - actual deletion
 //
-void POST_Handle_Delete(AsyncWebServerRequest *request){
+void POST_Handle_Delete(AsyncWebServerRequest *request) {
+  if (!_webAuth(request))
+    return;
 
-  if(!_webAuth(request)) return;
-
-  //Check if POST (but not File) parameter exists
-  if(request->hasParam("prog_name", true) && request->hasParam("yes", true)){
-    const AsyncWebParameter* p = request->getParam("yes", true);
-    if(p->value().compareTo(String("Yes!"))==0){ // yes user want's to delete program
-      const AsyncWebParameter* p = request->getParam("prog_name", true);
-      char path[32];
-      sprintf(path,"%s/%.*s",PRG_Directory,MAX_PROGNAME,p->value().c_str());
-      DBG dbgLog(LOG_DEBUG,"[HTTP] Removing program: %s with fpath:%s\n",p->value().c_str(),path);
-      if(LittleFS.exists(path)){
-        LittleFS.remove(path);
-        Generate_INDEX();
-      }
+  /* Rely on submit button name="yes" (not the display value). */
+  if (request->hasParam("prog_name", true) && request->hasParam("yes", true)) {
+    const AsyncWebParameter *p = request->getParam("prog_name", true);
+    char path[32];
+    sprintf(path, "%s/%.*s", PRG_Directory, MAX_PROGNAME, p->value().c_str());
+    DBG dbgLog(LOG_DEBUG, "[HTTP] Removing program: %s with fpath:%s\n",
+               p->value().c_str(), path);
+    if (LittleFS.exists(path)) {
+      LittleFS.remove(path);
+      Generate_INDEX();
     }
   }
   request->redirect("/programs");
 }
 
-
 // Handle delete - first run, get - are you sure question
 //
-void GET_Handle_Delete(AsyncWebServerRequest *request){
-File tmpf;
-char line[256];
+void GET_Handle_Delete(AsyncWebServerRequest *request) {
+  DBG dbgLog(LOG_DEBUG, "[HTTP]  Request type: %d\n", request->method());
+  DBG dbgLog(LOG_DEBUG, "[HTTP]  Request url: %s\n", request->url().c_str());
 
-  DBG dbgLog(LOG_DEBUG,"[HTTP]  Request type: %d\n",request->method());
-  DBG dbgLog(LOG_DEBUG,"[HTTP]  Request url: %s\n",request->url().c_str());
-
-  if(!request->hasParam("prog_name") || !(tmpf=LittleFS.open("/delete.html", "r")) ){  // if no program to delete - skip
-    DBG dbgLog(LOG_ERR,"[HTTP]  Failed to find GET or open delete.html");
+  if (!request->hasParam("prog_name") || !LittleFS.exists("/delete.html")) {
+    DBG dbgLog(LOG_ERR, "[HTTP]  Failed to find GET prog_name or delete.html");
     request->redirect("/programs");
     return;
   }
- 
-  const AsyncWebParameter* p = request->getParam("prog_name");
-  const char *prog = p->value().c_str();
-  
-  AsyncResponseStream *response = request->beginResponseStream("text/html");
-  response->addHeader("Server","ESP Async Web Server");
 
-  DBG dbgLog(LOG_DEBUG,"[HTTP] Opened file is %s, program name is:%s\n",tmpf.path(),prog);
-  
-  while(tmpf.available()){
-    read_first_line(tmpf, line, sizeof(line));
-    char *ph = strstr(line, "~PROGRAM_NAME~");
-    if(ph){
-      char out[256];
-      size_t head = (size_t)(ph - line);
-      if(head >= sizeof(out)) head = sizeof(out) - 1;
-      memcpy(out, line, head);
-      out[head] = '\0';
-      strncat(out, prog, sizeof(out) - strlen(out) - 1);
-      strncat(out, ph + strlen("~PROGRAM_NAME~"), sizeof(out) - strlen(out) - 1);
-      response->println(out);
-    }else{
-      response->println(line);
-    }
-  }
+  const AsyncWebParameter *p = request->getParam("prog_name");
+  strncpy(g_delete_prog_name, p->value().c_str(), MAX_PROGNAME);
+  g_delete_prog_name[MAX_PROGNAME] = '\0';
 
-  tmpf.close();
-  request->send(response);
+  request->send(LittleFS, "/delete.html", String(), false, Delete_parser);
 }
 
 
