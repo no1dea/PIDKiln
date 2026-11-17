@@ -185,14 +185,56 @@ Optional hardware and I/O stacks are selected by **PlatformIO env**, not by comm
 
 | Env | What you get |
 |-----|----------------|
-| `esp32-wrover` / `esp32-wrover-release` / `esp32-wroom` | Full kit: LCD+encoder, WiFi, HTTP, logs, EMR, alarm, housing TC, syslog |
-| `esp32-wrover-web` | Headless web controller (no LCD/encoder / no U8g2) |
-| `esp32-wrover-local` | LCD+encoder + kiln extras, no WiFi/HTTP/syslog |
+| `esp32-wrover` / `esp32-wrover-release` / `esp32-wroom` | Full kit: LCD+encoder, WiFi, HTTP, JSON API, logs, EMR, alarm, housing TC, syslog |
+| `esp32-wrover-web` | Headless web + API (no LCD/encoder / no U8g2) |
+| `esp32-wrover-api` | Headless JSON API only (`HTTP=0`, no browser UI) |
+| `esp32-wrover-local` | LCD+encoder + kiln extras, no WiFi/HTTP/API/syslog |
 | `esp32-wrover-core` | Minimal: prefs, FS, PID/program, MAX31855-A, SSR1 only |
+
+`PK_FEATURE_HTTP` and `PK_FEATURE_API` are independent; both require `PK_FEATURE_WIFI`. Product envs that enable HTTP also enable API. Shared `AsyncWebServer` host is in [`src/PIDKiln_webhost.cpp`](src/PIDKiln_webhost.cpp); UI routes stay in [`src/PIDKiln_http.cpp`](src/PIDKiln_http.cpp), JSON in [`src/PIDKiln_api.cpp`](src/PIDKiln_api.cpp).
 
 SSR2 and energy meter are off in the named envs; enable `-DPK_FEATURE_SSR2=1` / `-DPK_FEATURE_ENERGY=1` and include the matching sources/libs if those peripherals are wired.
 
-Firmware sources: sole sketch [`src/PIDKiln.ino`](src/PIDKiln.ino); modules are `src/PIDKiln_*.cpp` (heat, lcd, input, http, net, logs, emr, alarm, housing_tc, …). Pure logic for host tests lives in [`lib/PIDKilnLogic`](lib/PIDKilnLogic).
+Firmware sources: sole sketch [`src/PIDKiln.ino`](src/PIDKiln.ino); modules are `src/PIDKiln_*.cpp` (heat, lcd, input, http, api, webhost, net, logs, emr, alarm, housing_tc, …). Pure logic for host tests lives in [`lib/PIDKilnLogic`](lib/PIDKilnLogic).
+
+### Remote JSON API (`/api/v1`)
+
+Peer to the browser UI — stable JSON, not HTML form fields. Auth: HTTP Basic (`Auth_Username` / `Auth_Password`). Content-Type: `application/json; charset=utf-8`. Temps in °C; timestamps as Unix epoch seconds. Errors use a small envelope: `{"err":"…","msg":"…","code":409}`. Successful actions return `204` with no body. Poll `/status` no faster than about every 2–5 s.
+
+**Implemented (v1 Core)**
+
+| Method | Path | Notes |
+|--------|------|-------|
+| `GET` | `/api/v1` | Discovery: `api`, `v`, `features` |
+| `GET` | `/api/v1/health` | `{ok, uptime_s}` (auth required) |
+| `GET` | `/api/v1/status` | Live kiln snapshot (see below) |
+| `POST` | `/api/v1/run/start` | Resume if paused, else start loaded program |
+| `POST` | `/api/v1/run/pause` | Pause running program (`409` if not running) |
+| `POST` | `/api/v1/run/resume` | Resume only (`409` if not paused) |
+| `POST` | `/api/v1/run/end` | End active run |
+| `POST` | `/api/v1/run/abort` | Abort + user-abort error |
+| `POST` | `/api/v1/programs/load` | Body `{"name":"program1.txt"}` |
+
+`GET /api/v1/status` fields: `kiln_c`, `set_c`, `case_c`, `int_c`, `state`, `error`, `step`, `steps`, `heat_pct`, `ramp_cps`; optional `run_name`, `start_ts`, `eta_ts` when a run is loaded.
+
+**Reserved (not implemented yet — omit handlers; documented for clients)**
+
+- `GET /api/v1/telemetry`, `GET /api/v1/run`
+- `GET /api/v1/programs`, `GET /api/v1/programs/{name}`, later `PUT`/`DELETE`
+- Logs list/get/delete; `GET /api/v1/system`, reboot; prefs read/`PATCH`
+- Never via API: firmware OTA, raw conf download, LCD/screenshot, secrets in JSON
+
+Smoke (device on LAN, default prefs `admin` / `hotashell`):
+
+```
+curl -u admin:hotashell http://<ip>/api/v1/status
+curl -u admin:hotashell -X POST http://<ip>/api/v1/run/pause
+curl -u admin:hotashell -X POST http://<ip>/api/v1/run/resume
+curl -u admin:hotashell -H "Content-Type: application/json" \
+  -d "{\"name\":\"program1.txt\"}" http://<ip>/api/v1/programs/load
+```
+
+Build checks: `pio run -e esp32-wrover` (HTTP+API) and `pio run -e esp32-wrover-api` (API only).
 
 **Local JS/CSS:** static assets under `data/js` and `data/css` are precompressed (`.gz`) for ESPAsyncWebServer. Large Chart/jQuery libs ship as `.gz` only. After bumping those libs, place the new uncompressed files in `data/js/` and run `scripts/compress_webassets.ps1`.
 

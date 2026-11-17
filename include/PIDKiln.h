@@ -335,6 +335,9 @@ boolean Setup_WiFi();
 boolean Restart_WiFi();
 void SETUP_WebServer(void);
 void STOP_WebServer();
+void SETUP_Api(void);
+void WebHost_Begin();
+void WebHost_End();
 void Generate_INDEX();
 void Generate_LOGS_INDEX();
 

@@ -14,6 +14,9 @@
 #ifndef PK_FEATURE_HTTP
 #error "PK_FEATURE_HTTP must be set by the build env (0 or 1)"
 #endif
+#ifndef PK_FEATURE_API
+#error "PK_FEATURE_API must be set by the build env (0 or 1)"
+#endif
 #ifndef PK_FEATURE_LOGS
 #error "PK_FEATURE_LOGS must be set by the build env (0 or 1)"
 #endif
@@ -38,6 +41,9 @@
 
 #if PK_FEATURE_HTTP && !PK_FEATURE_WIFI
 #error "PK_FEATURE_HTTP requires PK_FEATURE_WIFI"
+#endif
+#if PK_FEATURE_API && !PK_FEATURE_WIFI
+#error "PK_FEATURE_API requires PK_FEATURE_WIFI"
 #endif
 #if PK_FEATURE_SYSLOG && !PK_FEATURE_WIFI
 #error "PK_FEATURE_SYSLOG requires PK_FEATURE_WIFI"

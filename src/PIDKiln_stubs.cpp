@@ -80,6 +80,15 @@ void SETUP_WebServer(void) {}
 void STOP_WebServer() {}
 #endif
 
+#if !PK_FEATURE_API
+void SETUP_Api(void) {}
+#endif
+
+#if !(PK_FEATURE_HTTP || PK_FEATURE_API)
+void WebHost_Begin() {}
+void WebHost_End() {}
+#endif
+
 #if !PK_FEATURE_LOGS
 void Init_log_file() {}
 void Add_log_line() {}

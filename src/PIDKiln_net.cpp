@@ -110,7 +110,15 @@ struct tm timeinfo;
       err=Start_WiFi_CLIENT();
       if(!err){
         configTime(Prefs[PRF_GMT_OFFSET].value.int16, Prefs[PRF_DAYLIGHT_OFFSET].value.int16, Prefs[PRF_NTPSERVER1].value.str, Prefs[PRF_NTPSERVER2].value.str, Prefs[PRF_NTPSERVER3].value.str); // configure RTC clock with NTP server - or at least try
-        SETUP_WebServer(); // Setup function for Webserver from PIDKiln_http.ino
+#if PK_FEATURE_HTTP
+        SETUP_WebServer();
+#endif
+#if PK_FEATURE_API
+        SETUP_Api();
+#endif
+#if PK_FEATURE_HTTP || PK_FEATURE_API
+        WebHost_Begin();
+#endif
         initSysLog();
         return 0;    // all is ok - connected
       }else if(Prefs[PRF_WIFI_MODE].value.uint8==2) return err;  // not connected and won't try be AP
@@ -120,7 +128,15 @@ struct tm timeinfo;
     err=Start_WiFi_AP();
     
     if(!err){ // WiFi enabled in client mode (connected to AP - perhaps with Internet - try it)
+#if PK_FEATURE_HTTP
       SETUP_WebServer();
+#endif
+#if PK_FEATURE_API
+      SETUP_Api();
+#endif
+#if PK_FEATURE_HTTP || PK_FEATURE_API
+      WebHost_Begin();
+#endif
       return 0;
     }return err;
   }else{
@@ -133,7 +149,7 @@ struct tm timeinfo;
 // Perform WiFi restart - usually when something does not work right - reinitialize it (perhaps preferences has changed)
 //
 boolean Restart_WiFi(){
-  STOP_WebServer();
+  WebHost_End();
   delay(100);
   Disable_WiFi();
   delay(500);
