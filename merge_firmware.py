@@ -59,11 +59,6 @@ def merge_firmware(source, target, env):
     board = env.BoardConfig()
     build_dir = env.subst("$BUILD_DIR")
     merged = join(build_dir, "firmware.merged.bin")
-    pkg = env.PioPlatform().get_package_dir("tool-esptoolpy")
-    esptool = join(pkg, "esptool.py")
-    if not isfile(esptool):
-        esptool = join(pkg, "esptool")
-
     flash_size = board.get("upload.flash_size", "4MB")
     images = [(offset, env.subst(path)) for offset, path in env.get("FLASH_EXTRA_IMAGES", [])]
     images.append((env.subst("$ESP32_APP_OFFSET"), str(target[0])))
@@ -79,19 +74,21 @@ def merge_firmware(source, target, env):
             "`pio run -e %s -t buildfs` first" % (fs_image, env["PIOENV"])
         )
 
+    # Use `python -m esptool` (esptool.py script path is deprecated).
     cmd = [
         '"$PYTHONEXE"',
-        '"%s"' % esptool,
+        "-m",
+        "esptool",
         "--chip",
         board.get("build.mcu", "esp32"),
-        "merge_bin",
+        "merge-bin",
         "-o",
         '"%s"' % merged,
-        "--flash_mode",
+        "--flash-mode",
         board.get("build.flash_mode", "dio"),
-        "--flash_size",
+        "--flash-size",
         flash_size,
-        "--fill-flash-size",
+        "--pad-to-size",
         flash_size,
     ]
     for offset, path in images:
