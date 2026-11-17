@@ -185,6 +185,8 @@ This is the short version — for hardware assembly see the [Wiki](https://githu
 
 **Web OTA:** upload a firmware `.bin`, or a filesystem image whose name contains `littlefs` or legacy `spiffs`. The partition update command remains Arduino’s `U_SPIFFS` (filesystem partition), even when the image content is LittleFS.
 
+**Legacy `OTA_Install/`:** not the supported install path. It pulls cleartext HTTP binaries from a hard-coded URL for brick recovery only; prefer PlatformIO `upload` / `uploadfs` or the web flash UI.
+
 **Arduino-ESP32 4.x:** not validated in this release. Expect a platform URL pin bump in `platformio.ini` plus retest of AsyncTCP, WDT, and OTA.
 
 ### Tests without hardware

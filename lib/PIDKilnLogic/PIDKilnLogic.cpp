@@ -54,3 +54,14 @@ int PIDKiln_parse_program_line(const char *line, uint16_t max_temp, PIDKiln_Prog
   out->dwell = prg[2];
   return 0;
 }
+
+int PIDKiln_inline_comment_pos(const char *line) {
+  if (!line) return -1;
+  const char *p = strchr(line, '#');
+  if (!p) return -1;
+  return (int)(p - line);
+}
+
+int PIDKiln_can_add_program_step(unsigned size, unsigned max_steps) {
+  return (size < max_steps) ? 1 : 0;
+}

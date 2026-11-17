@@ -26,6 +26,12 @@ int PIDKiln_valid_filename(const char *file);
  */
 int PIDKiln_parse_program_line(const char *line, uint16_t max_temp, PIDKiln_ProgramStep *out);
 
+/* Index of first '#' for inline comments, or -1 if none. Leading '#' is index 0. */
+int PIDKiln_inline_comment_pos(const char *line);
+
+/* 1 if another program step may be stored, 0 if at capacity. */
+int PIDKiln_can_add_program_step(unsigned size, unsigned max_steps);
+
 #ifdef __cplusplus
 }
 #endif

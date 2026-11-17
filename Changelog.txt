@@ -12,6 +12,8 @@
 - added esp32-wrover-release env (DEBUG=0) for production flash headroom
 - programs/logs indexes generated dynamically over HTTP (no LittleFS rewrite)
 - moved mutable globals out of PIDKiln.h into PIDKiln_globals.cpp; Kiln_SetSSR heater ownership API
+- SoftAP uses WiFi_AP_Name / WiFi_AP_Pass prefs; telemetry snapshot for HTTP JSON reads
+- OTA_Install marked legacy; PIDKilnLogic helpers for comment strip + program length (+ Unity tests)
 
 1.5 (2024.12.18)
 - updated code to compile against ESP3+ API, Arduino 2+ and latest asynce libraries

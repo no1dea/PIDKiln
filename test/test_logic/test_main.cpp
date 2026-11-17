@@ -53,6 +53,19 @@ static void test_parse_program_line_errors(void) {
   TEST_ASSERT_EQUAL_INT(4, PIDKiln_parse_program_line("1400:10:0", 1350, &step));
 }
 
+static void test_inline_comment_pos(void) {
+  TEST_ASSERT_EQUAL_INT(0, PIDKiln_inline_comment_pos("# full line comment"));
+  TEST_ASSERT_EQUAL_INT(8, PIDKiln_inline_comment_pos("95:30:20 # dwell"));
+  TEST_ASSERT_EQUAL_INT(-1, PIDKiln_inline_comment_pos("95:30:20"));
+}
+
+static void test_can_add_program_step(void) {
+  TEST_ASSERT_TRUE(PIDKiln_can_add_program_step(0, 40));
+  TEST_ASSERT_TRUE(PIDKiln_can_add_program_step(39, 40));
+  TEST_ASSERT_FALSE(PIDKiln_can_add_program_step(40, 40));
+  TEST_ASSERT_FALSE(PIDKiln_can_add_program_step(41, 40));
+}
+
 static void test_parse_sample_program1_steps(void) {
   /* Steps from data/programs/program1.txt (comment lines ignored by loader). */
   const char *steps[] = {
@@ -77,6 +90,8 @@ int main(int argc, char **argv) {
   RUN_TEST(test_check_valid_chars);
   RUN_TEST(test_parse_program_line_ok);
   RUN_TEST(test_parse_program_line_errors);
+  RUN_TEST(test_inline_comment_pos);
+  RUN_TEST(test_can_add_program_step);
   RUN_TEST(test_parse_sample_program1_steps);
   return UNITY_END();
 }

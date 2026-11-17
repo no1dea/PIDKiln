@@ -36,6 +36,8 @@ String Preferences_parser(const String& var){
  else if(var=="WiFi_Mode2" && Prefs[PRF_WIFI_MODE].value.uint8==2) return "checked";
  else if(var=="WiFi_Mode3" && Prefs[PRF_WIFI_MODE].value.uint8==3) return "checked";
  else if(var=="WiFi_Retry_cnt") return String(Prefs[PRF_WIFI_RETRY_CNT].value.uint8);
+ else if(var=="WiFi_AP_Name") return String(Prefs[PRF_WIFI_AP_NAME].value.str);
+ else if(var=="WiFi_AP_Pass") return String(Prefs[PRF_WIFI_AP_PASS].value.str);
 
  else if(var=="HTTP_Local_JS0" && Prefs[PRF_HTTP_JS_LOCAL].value.uint8==0) return "checked";
  else if(var=="HTTP_Local_JS1" && Prefs[PRF_HTTP_JS_LOCAL].value.uint8==1) return "checked";
@@ -595,18 +597,20 @@ int params = request->params();
 String handleVars(const String& var){
 char str[30];
 struct tm timeinfo, *tmm;
+KilnTelemetry telem;
+Kiln_ReadTelemetry(&telem);
 
-  if(var=="KILN_TEMP") return String(kiln_temp);
-  else if(var=="SET_TEMP") return String(set_temp);
-  else if(var=="ENV_TEMP") return String(int_temp);
-  else if(var=="CASE_TEMP") return String(case_temp);
+  if(var=="KILN_TEMP") return String(telem.kiln_temp);
+  else if(var=="SET_TEMP") return String(telem.set_temp);
+  else if(var=="ENV_TEMP") return String(telem.int_temp);
+  else if(var=="CASE_TEMP") return String(telem.case_temp);
   else if(var=="HEAT_TIME") return String((pid_out/Prefs[PRF_PID_WINDOW].value.uint16)*100*PID_WINDOW_DIVIDER);
   else if(var=="TEMP_CHANGE") return String(temp_incr);
   else if(var=="STEP"){
-    if(Program_run_state==PR_RUNNING){
+    if(telem.program_run_state==PR_RUNNING){
       if(temp_incr==0) strcpy(str,"Dwell");
       else strcpy(str,"Running");
-    }else strcpy(str,Prog_Run_Names[Program_run_state]);
+    }else strcpy(str,Prog_Run_Names[telem.program_run_state]);
     return String(Program_run_step+1)+" of "+String(Program_run_size)+" - "+String(str);
   }
   else if(var=="CURR_TIME"){

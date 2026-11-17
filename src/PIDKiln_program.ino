@@ -35,7 +35,7 @@ void IRAM_ATTR onTimer(){
 byte add_program_line(String& linia){
   // Looking for line dddd:dddd:dddd (temperature:time in minutes:time in minutes) - assume max 1350:9999:9999
   PIDKiln_ProgramStep step;
-  if(Program_size>=MAX_PRG_LENGTH){
+  if(!PIDKiln_can_add_program_step(Program_size, MAX_PRG_LENGTH)){
     DBG dbgLog(LOG_ERR,"[PRG] Program too long (max %d steps)\n",MAX_PRG_LENGTH);
     return 5;
   }
@@ -90,9 +90,12 @@ File prg;
         }
       }else{
         // Sanitize every line - if it's have a comment - strip ip, then check if this are only numbers and ":" - otherwise fail
-        if((pos=line.indexOf("#"))>=0){
-          line=line.substring(0,pos);
-          line.trim(); // trim again after removing comment
+        {
+          int cpos=PIDKiln_inline_comment_pos(line.c_str());
+          if(cpos>=0){
+            line=line.substring(0,(unsigned)cpos);
+            line.trim();
+          }
         }
         
         if(line.length()>15) return Cleanup_program(2);  // program line too long
@@ -512,6 +515,7 @@ uint32_t now;
 
       // Update temperature readout
       Update_TemperatureA();
+      Kiln_PublishTelemetry();
 
       // Check if there is Alarm ON - if so, lower time and call STOP
       if(ALARM_countdown>0){

@@ -311,3 +311,14 @@ void Enable_SSR();
 void Disable_SSR();
 void Enable_EMR();
 void Disable_EMR();
+
+struct KilnTelemetry {
+  double kiln_temp;
+  double case_temp;
+  double int_temp;
+  double set_temp;
+  uint8_t program_run_state;
+  uint8_t program_error;
+};
+void Kiln_PublishTelemetry();
+void Kiln_ReadTelemetry(KilnTelemetry *out);

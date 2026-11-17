@@ -1,9 +1,13 @@
 /*
-** PIDKiln OTA Install
+** PIDKiln OTA Install — LEGACY / LAST-RESORT ONLY
 **
-** Downloads LittleFS image + firmware sketch over HTTP.
-** based on: httpUpdateSPIFFS.ino
-** Created on: 05.12.2015
+** Preferred install path for v1.6+: PlatformIO
+**   pio run -e esp32-wrover -t upload
+**   pio run -e esp32-wrover -t uploadfs
+** Or use the device web UI "Flash firmware" page with a local .bin.
+**
+** This sketch downloads LittleFS + firmware over cleartext HTTP from a
+** hard-coded host — keep it only for brick recovery on air-gapped setups.
 **
 ** Note: httpUpdate.updateSpiffs() still targets the filesystem partition
 ** (Arduino U_SPIFFS cmd) even when the image content is LittleFS.

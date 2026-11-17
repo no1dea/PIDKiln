@@ -86,9 +86,12 @@ int pos=0;
       line.trim();
       if(!line.length()) continue;         // empty line - skip it
       if(line.startsWith("#")) continue;   // skip every comment line
-      if((pos=line.indexOf("#"))>=0){
-        line=line.substring(0,pos);
-        line.trim(); // trim again after removing comment
+      {
+        int cpos=PIDKiln_inline_comment_pos(line.c_str());
+        if(cpos>=0){
+          line=line.substring(0,(unsigned)cpos);
+          line.trim();
+        }
       }
       // Now we have a clean line - parse it
       if((pos=line.indexOf("="))>2){          // we need to have = sign - if not, ignore
@@ -150,6 +153,18 @@ char tmp[30];
       case PRF_WIFI_RETRY_CNT:
         Prefs[PRF_WIFI_RETRY_CNT].type=UINT8;
         Prefs[PRF_WIFI_RETRY_CNT].value.uint8=6;
+        break;
+      case PRF_WIFI_AP_NAME:
+        Prefs[PRF_WIFI_AP_NAME].type=STRING;
+        Prefs[PRF_WIFI_AP_NAME].value.str=strdup("PIDKiln_AP");
+        break;
+      case PRF_WIFI_AP_USERNAME:
+        Prefs[PRF_WIFI_AP_USERNAME].type=STRING;
+        Prefs[PRF_WIFI_AP_USERNAME].value.str=strdup(""); // unused by SoftAP
+        break;
+      case PRF_WIFI_AP_PASS:
+        Prefs[PRF_WIFI_AP_PASS].type=STRING;
+        Prefs[PRF_WIFI_AP_PASS].value.str=strdup("hotashell");
         break;
 
       case PRF_HTTP_JS_LOCAL:

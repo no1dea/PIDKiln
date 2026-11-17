@@ -95,9 +95,21 @@ boolean Start_WiFi_AP(){
   IPAddress subnet(255,255,255,0);
 
   WiFi.softAPConfig(local_IP, gateway, subnet);
-  
-  DBG dbgLog(LOG_INFO,"[NET] Creating WiFi Access Point (AP)");
-  WiFi.softAP(DEFAULT_AP, DEFAULT_PASS, 8);
+
+  const char *ap_name = DEFAULT_AP;
+  const char *ap_pass = DEFAULT_PASS;
+  if(Prefs[PRF_WIFI_AP_NAME].type==STRING && Prefs[PRF_WIFI_AP_NAME].value.str
+     && strlen(Prefs[PRF_WIFI_AP_NAME].value.str)>=1){
+    ap_name = Prefs[PRF_WIFI_AP_NAME].value.str;
+  }
+  if(Prefs[PRF_WIFI_AP_PASS].type==STRING && Prefs[PRF_WIFI_AP_PASS].value.str
+     && strlen(Prefs[PRF_WIFI_AP_PASS].value.str)>=8){
+    ap_pass = Prefs[PRF_WIFI_AP_PASS].value.str;
+  }
+  // WiFi_AP_Username is unused by SoftAP (HTTP Basic Auth uses Auth_* prefs).
+
+  DBG dbgLog(LOG_INFO,"[NET] Creating WiFi Access Point (AP)%s\n", ap_name);
+  WiFi.softAP(ap_name, ap_pass, 8);
   return 0;
 }
 

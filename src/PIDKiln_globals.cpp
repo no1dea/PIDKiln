@@ -82,3 +82,24 @@ const char *PDate = "2026.11.16";
 
 WiFiUDP udpClient;
 Syslog syslog(udpClient, SYSLOG_PROTO_IETF);
+
+static portMUX_TYPE s_telem_mux = portMUX_INITIALIZER_UNLOCKED;
+static KilnTelemetry s_telem = {};
+
+void Kiln_PublishTelemetry() {
+  portENTER_CRITICAL(&s_telem_mux);
+  s_telem.kiln_temp = kiln_temp;
+  s_telem.case_temp = case_temp;
+  s_telem.int_temp = int_temp;
+  s_telem.set_temp = set_temp;
+  s_telem.program_run_state = (uint8_t)Program_run_state;
+  s_telem.program_error = Program_error;
+  portEXIT_CRITICAL(&s_telem_mux);
+}
+
+void Kiln_ReadTelemetry(KilnTelemetry *out) {
+  if (!out) return;
+  portENTER_CRITICAL(&s_telem_mux);
+  *out = s_telem;
+  portEXIT_CRITICAL(&s_telem_mux);
+}
