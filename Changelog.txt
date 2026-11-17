@@ -2,12 +2,15 @@
 - modular compile-time features via PK_FEATURE_* + named envs (full/web/local/core); secondary .ino → .cpp
 - split addons into heat/emr/alarm/housing_tc/ssr2/energy; stubs when features off
 - Unity native suites: test_logic, test_safety, test_program (+ CI workflow)
+- removed OTA_Install/ recovery sketch and binaries
+- web OTA is firmware-only (U_FLASH); no filesystem-partition HTTP update
+- purged live SPIFFS naming (docs + merge script); LittleFS via uploadfs / buildfs only
 
 1.6 (2026.11.16)
 - PlatformIO / pioarduino primary build (Arduino-ESP32 3.3.12 pinned)
 - pinned ESP32Async AsyncTCP + ESPAsyncWebServer; TEMPLATE_PLACEHOLDER via build_flags
 - migrated filesystem from SPIFFS to LittleFS (dirs created on mount; OTA accepts littlefs/spiffs names)
-- dropped private rtc_wdt WDT calls; gated public WDT relax behind RELAX_WDT_FOR_ASYNCTCP
+- dropped private rtc_wdt WDT calls; public WDT relax removed (core WDTs stay enabled)
 - fixed HTTP_Local_JS preference check (.uint8); local JS no longer claims gzip encoding
 - sources under src/, shared header under include/; 4.x path = bump platform pin and retest
 - replaced Saur0o0n/enjoyneering MAX31855 fork with Adafruit MAX31855 1.4.2 + BusIO 1.17.4 (HSPI dual CS unchanged)

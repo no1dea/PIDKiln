@@ -196,13 +196,17 @@ Firmware sources: sole sketch [`src/PIDKiln.ino`](src/PIDKiln.ino); modules are 
 
 **Local JS/CSS:** static assets under `data/js` and `data/css` are precompressed (`.gz`) for ESPAsyncWebServer. Large Chart/jQuery libs ship as `.gz` only. After bumping those libs, place the new uncompressed files in `data/js/` and run `scripts/compress_webassets.ps1`.
 
-**Migrating from SPIFFS (v1.5 and older):** there is no in-place conversion. Backup programs and `pidkiln.conf`, flash the new firmware + LittleFS image, then restore files via the web UI or by editing `data/` before `uploadfs`.
+**Pre-LittleFS installs (v1.5 and older):** there is no in-place filesystem conversion. Backup programs and `pidkiln.conf`, flash the new firmware + LittleFS image (`uploadfs` or rebuild `data/`), then restore files via the web UI.
 
-**Web OTA:** upload a firmware `.bin`, or a filesystem image whose name contains `littlefs` or legacy `spiffs`. The partition update command remains Arduino’s `U_SPIFFS` (filesystem partition), even when the image content is LittleFS.
-
-**Legacy `OTA_Install/`:** not the supported install path. It pulls cleartext HTTP binaries from a hard-coded URL for brick recovery only; prefer PlatformIO `upload` / `uploadfs` or the web flash UI.
+**Web OTA:** upload a firmware `.bin` only (app partition). Update LittleFS with PlatformIO `pio run -e … -t uploadfs` (or rebuild `data/` into the merged Wokwi image).
 
 **Arduino-ESP32 4.x:** not validated in this release. Expect a platform URL pin bump in `platformio.ini` plus retest of AsyncTCP, WDT, and OTA.
+
+**Known leftovers (unused / historical names, kept for now):**
+- Pref `WiFi_AP_Username` — SoftAP ignores it; HTTP Basic Auth uses `Auth_*`
+- `Generate_INDEX` / `Generate_LOGS_INDEX` — names are historical; they only refresh in-memory directory lists
+- Program/log dir loaders still skip a file named `index.html` (leftover from when indexes were written to the FS)
+- LCD SW-SPI constructor remains commented as an alternate wiring path
 
 ### Tests without hardware
 

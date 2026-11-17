@@ -3,7 +3,7 @@
 Import("env")
 from os.path import join, isfile
 
-# Offset of the spiffs/littlefs partition in the default 4MB Arduino table
+# Offset of the LittleFS partition in the default 4MB Arduino table
 # (see framework-arduinoespressif32/tools/partitions/default.csv).
 FS_OFFSET = "0x290000"
 
@@ -11,7 +11,7 @@ FS_OFFSET = "0x290000"
 def _fs_image_path(env):
     build_dir = env.subst("$BUILD_DIR")
     name = env.subst("$ESP32_FS_IMAGE_NAME") or "littlefs"
-    for candidate in (name + ".bin", "littlefs.bin", "spiffs.bin"):
+    for candidate in (name + ".bin", "littlefs.bin"):
         path = join(build_dir, candidate)
         if isfile(path):
             return path

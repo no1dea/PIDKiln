@@ -141,7 +141,8 @@ File dir,file;
     fname=strchr(tmp+1,'/');        // seek for the NEXT directory separator...
     fname++;                        //  ..and skip it
 */
-    if(!strcmp(tmp,"index.html")) continue;   // skip index file
+    // LEGACY: skip on-disk index.html left from when indexes were written to the FS
+    if(!strcmp(tmp,"index.html")) continue;
     strcpy(Programs_DIR[Programs_DIR_size].filename,tmp);
     Programs_DIR[Programs_DIR_size].filesize=file.size();
     Programs_DIR[Programs_DIR_size].sel=0;
@@ -594,12 +595,7 @@ void Program_Setup(){
   timerAlarm(timer, 1000000, true, 0);
 
 
-// For testing!!!
-//  Load_program("test_up_down.txt");
-//  Load_program_to_run();
-
   xTaskCreatePinnedToCore(
-//  xTaskCreate(
               Program_Loop,    /* Task function. */
               "Program_loop",  /* String with name of task. */
               8192,            /* Stack size in bytes. */

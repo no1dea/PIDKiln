@@ -22,7 +22,7 @@
 #define LCD_CLOCK 18  // E on LCD
 #define LCD_DATA 23   // R/W on LCD
 
-// You can switch hardware or software SPI interface to LCD. HW can be up to x10 faster - but requires special pins (and has some errors for me on 5V).
+// LEGACY: SW-SPI alternate wiring (uses LCD_CLOCK/LCD_DATA) — not compiled; HW SPI is active.
 //U8G2_ST7920_128X64_F_SW_SPI u8g2(U8G2_R2, /* clock=*/ LCD_CLOCK, /* data=*/ LCD_DATA, /* CS=*/ LCD_CS, /* reset=*/ LCD_RESET);
 U8G2_ST7920_128X64_F_HW_SPI u8g2(U8G2_R2, /* CS=*/ LCD_CS, /* reset=*/ LCD_RESET);
 

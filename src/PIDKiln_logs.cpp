@@ -157,7 +157,8 @@ File dir,file;
     len2=strlen(tmp);
     if(len2>31 || len2<2) return 2; // file name with dir too long or just /
     
-    if(!strcmp(tmp,"index.html")) continue;   // skip index file
+    // LEGACY: skip on-disk index.html left from when indexes were written to the FS
+    if(!strcmp(tmp,"index.html")) continue;
     
     strcpy(Logs_DIR[Logs_DIR_size].filename,tmp);
     Logs_DIR[Logs_DIR_size].filesize=file.size();

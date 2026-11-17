@@ -20,9 +20,6 @@ static bool _webAuth(AsyncWebServerRequest *request);
 String template_str;  // Stores template pareser output
 char *Errors;         // pointer to string if there are some errors during POST
 
-//flag to use from web update to reboot the ESP
-bool shouldReboot = false;
-
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 
@@ -655,20 +652,14 @@ void do_screenshot(AsyncWebServerRequest *request){
 #endif
 
 
-// Funnctin handling firmware upload/update (from https://github.com/lbernstone/asyncUpdate/blob/master/AsyncUpdate.ino)
+// Firmware-only upload/update (from https://github.com/lbernstone/asyncUpdate/blob/master/AsyncUpdate.ino).
+// LittleFS images are not updated over HTTP — use PlatformIO uploadfs.
 //
 void handleDoUpdate(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
-size_t content_len;
-  
+  (void)filename;
   if (!index){
     DBG dbgLog(LOG_INFO,"[HTTP] Beginning firmware update\n");
-    content_len = request->contentLength();
-    // FS image update: Arduino still uses U_SPIFFS for the filesystem partition.
-    // Accept both legacy "spiffs" and current "littlefs" in the uploaded filename.
-    String fnameLower = filename;
-    fnameLower.toLowerCase();
-    int cmd = (fnameLower.indexOf("spiffs") > -1 || fnameLower.indexOf("littlefs") > -1) ? U_SPIFFS : U_FLASH;
-    if (!Update.begin(UPDATE_SIZE_UNKNOWN, cmd)) {
+    if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
       Update.printError(Serial);
     }
   }
@@ -716,10 +707,8 @@ void SETUP_WebServer(void) {
   });
 
   server.serveStatic("/index.html", LittleFS, "/index.html").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
-  server.serveStatic("/index_local.html", LittleFS, "/index_local.html").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
-  
+
   server.on("/index.html", HTTP_POST, handleIndexPost);
-  server.on("/index_local.html", HTTP_POST, handleIndexPost);
   
   server.on("/js/chart.js", HTTP_GET, [](AsyncWebServerRequest *request){
     if(!_webAuth(request)) return;

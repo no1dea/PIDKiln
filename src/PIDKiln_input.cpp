@@ -185,7 +185,6 @@ void Setup_Input() {
   attachInterrupt(ENCODER0_BUTTON, handleInterrupt, FALLING);
 
   xTaskCreatePinnedToCore(
-//  xTaskCreate(
               Input_Loop,       /* Task function. */
               "Input_loop",     /* String with name of task. */
               8192,             /* Stack size in bytes. */
