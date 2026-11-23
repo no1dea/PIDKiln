@@ -120,8 +120,9 @@ File dir,file;
     fname=strchr(tmp+1,'/');        // seek for the NEXT directory separator...
     fname++;                        //  ..and skip it
 */
-    // LEGACY: skip on-disk index.html left from when indexes were written to the FS
+    // Only .json program files (skip index.html and any other non-program assets)
     if(!strcmp(tmp,"index.html")) continue;
+    if(len2 < 5 || strcmp(tmp + len2 - 5, ".json") != 0) continue;
     strcpy(Programs_DIR[Programs_DIR_size].filename,tmp);
     Programs_DIR[Programs_DIR_size].filesize=file.size();
     Programs_DIR[Programs_DIR_size].sel=0;

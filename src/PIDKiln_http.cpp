@@ -384,7 +384,9 @@ static void write_program_rows(AsyncResponseStream *response) {
     } else {
       response->print(F("Error opening file to read description"));
     }
-    response->print(F("</td><td><a href=\"/load.html?prog_name="));
+    response->print(F("</td><td><a href=\"/program_edit.html?prog="));
+    html_escape_write(response, Programs_DIR[a].filename);
+    response->print(F("\">edit</a></td><td><a href=\"/load.html?prog_name="));
     html_escape_write(response, Programs_DIR[a].filename);
     response->print(F("\">load</a></td><td><a href=\"/delete.html?prog_name="));
     html_escape_write(response, Programs_DIR[a].filename);
@@ -1003,6 +1005,11 @@ void SETUP_WebServer(void) {
 #if PK_FEATURE_LOCAL_UI
   server.on("/screenshot.html", HTTP_GET, do_screenshot);
 #endif
+
+  server.on("/program_edit.html", HTTP_GET, [](AsyncWebServerRequest *request){
+    if(!_webAuth(request)) return;
+    request->send(LittleFS, "/program_edit.html");
+  });
 
   server.on("/about.html", HTTP_GET, [](AsyncWebServerRequest *request){
     if(!_webAuth(request)) return;

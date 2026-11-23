@@ -44,7 +44,8 @@ $keepBoth = @(
   "data\js\nav.js",
   "data\js\programs.js",
   "data\js\json.js",
-  "data\js\chart.js"
+  "data\js\chart.js",
+  "data\js\program_editor.js"
 )
 
 # Large libs: gzip then delete plain so send()/serveStatic serve Content-Encoding: gzip
@@ -52,6 +53,15 @@ $largeLibsOnlyGz = @(
   "data\js\uPlot.iife.min.js",
   "data\css\uPlot.min.css"
 )
+
+# Minify curve editor before gzip (edit program_editor.src.js; npx terser builds .js)
+$editorJs = Join-Path $root "data\js\program_editor.js"
+$editorSrc = Join-Path $root "data\js\program_editor.src.js"
+if (Test-Path $editorSrc) {
+  Write-Host "Minifying program_editor.src.js -> program_editor.js ..."
+  npx --yes terser $editorSrc -c -m -o $editorJs
+  if ($LASTEXITCODE -ne 0) { throw "terser failed for program_editor" }
+}
 
 Write-Host "Compressing assets (keep plain + .gz)..."
 foreach ($rel in $keepBoth) {

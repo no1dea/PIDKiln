@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+ <title>PIDKiln — Curve editor</title>
+ <link rel="stylesheet" href="/css/main.css">
+ <link rel="stylesheet" href="/css/nav.css">
+ <script src="/js/nav.js"></script>
+ <script src="/js/program_editor.js" defer></script>
+ <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+ <meta charset="utf-8">
+</head>
+<body>
+
+ <nav class="topnav" id="myTopnav" aria-label="Main">
+  <a href="/index.html">Main view</a>
+  <a href="/programs/index.html" class="active" aria-current="page">Manage programs</a>
+  <a href="/logs/index.html">Logs</a>
+  <a href="/preferences.html">Preferences</a>
+  <a href="/about.html">About</a>
+  <a href="/debug_board.html">Debug ESP</a>
+  <a href="/flash_firmware.html">Flash firmware</a>
+  <button type="button" class="nav-toggle" onclick="switch_nav()" aria-label="Open menu">
+    <img src="/icons/menu.png" alt="">
+  </button>
+ </nav>
+
+ <main class="shell pe-shell">
+  <div class="pe-toolbar">
+   <a class="btn-link" href="/programs/index.html">← Programs</a>
+   <span class="pe-toolbar-meta">
+    <span id="pe-sel-label">Step 1</span>
+   </span>
+   <div class="pe-toolbar-btns">
+    <button type="button" class="pe-icon-btn" id="pe-add" title="Add step" aria-label="Add step">+</button>
+    <button type="button" class="pe-icon-btn" id="pe-rm" title="Remove selected step" aria-label="Remove step">−</button>
+    <button type="button" class="pe-save-btn" id="pe-save">Save</button>
+   </div>
+  </div>
+
+  <div class="pe-chart-wrap">
+   <div class="pe-chart-meta">
+    <span>Duration <strong id="pe-meta-dur">—</strong></span>
+    <span>Peak <strong id="pe-meta-peak">—</strong></span>
+    <span>Steps <strong id="pe-meta-steps">—</strong></span>
+   </div>
+   <svg id="pe-chart" class="pe-chart" role="img" aria-label="Heating curve"></svg>
+   <button type="button" class="pe-empty-add" id="pe-empty-add" hidden>+ Add first step</button>
+   <p class="pe-hint">Drag ● for temp &amp; ramp · ◆ for hold · + adds a step</p>
+  </div>
+
+  <div class="container pe-form">
+   <h1>Program</h1>
+   <div class="row">
+    <div class="col-25"><label for="pe-fname">Filename</label></div>
+    <div class="col-75"><input type="text" id="pe-fname" maxlength="20" autocomplete="off"></div>
+   </div>
+   <div class="row">
+    <div class="col-25"><label for="pe-name">Name</label></div>
+    <div class="col-75"><input type="text" id="pe-name" maxlength="31"></div>
+   </div>
+   <div class="row">
+    <div class="col-25"><label for="pe-desc">Description</label></div>
+    <div class="col-75"><textarea id="pe-desc" maxlength="159" rows="2"></textarea></div>
+   </div>
+   <div class="row">
+    <div class="col-25"><label for="pe-assume">Assume start °C</label></div>
+    <div class="col-75"><input type="number" id="pe-assume" min="0" max="1350"></div>
+   </div>
+
+   <h2 class="pe-steps-heading">Steps</h2>
+   <div id="pe-steps" class="pe-steps"></div>
+   <p id="pe-issues" class="status-line bad" hidden></p>
+   <p id="pe-msg" class="status-line" hidden></p>
+  </div>
+ </main>
+</body>
+</html>

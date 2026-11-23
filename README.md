@@ -4,6 +4,8 @@ PIDKiln is PID temperature controller, for any task involving high temperatures 
 ## Key features:
 - Interface accessible both from LCD screen and WWW Webpage
 - Unlimited (limited only by storage) temperature programs number; each program is a `pidkiln.program/v1` JSON file (≤10KiB, ≤40 steps) — see [`docs/pidkiln.program.v1.schema.json`](docs/pidkiln.program.v1.schema.json)
+- On-device visual curve editor at `/program_edit.html` (mobile-first, vanilla JS) — New/Edit from Manage programs
+- Optional Curve Companion on git branch `companion-svelte` — Svelte desktop/Docker editor for programs off-device
 - Internal ESP LittleFS storage for programs, data, logs, configuration (perhaps later SD - but I'm not sure yet)
 - Local preferences on disk, editable with Web interface
 - Online monitoring, program management, editing, graphs and kiln control
@@ -295,6 +297,7 @@ Arduino IDE is no longer the supported install path. Historical core matrix: PID
 
 - Most of the documentation you can find on [PIDKiln github page](https://github.com/Saur0o0n/pidkiln/wiki) - so please use it
 - Some less formal updates information and step by step instructions will be on [my webpage](https://adrian.siemieniak.net/portal/tag/PIDKiln/)
+- Visual program authoring (desktop): git branch `companion-svelte`; on-device: `/program_edit.html`
 
 ## Some future ideas
 
