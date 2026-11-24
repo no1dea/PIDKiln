@@ -79,6 +79,62 @@ int PIDKiln_thermal_runaway_heating(float temp_incr, double set_temp, double kil
 uint32_t PIDKiln_eta_remaining_seconds(const PIDKiln_ProgramStep *steps, unsigned run_step,
                                        unsigned run_size, int dwell_only);
 
+/* --- Control helpers (pure; host-testable) --- */
+
+/* °C per second for a ramp. togo_min == 0 → 0 (caller jumps setpoint). */
+float PIDKiln_ramp_temp_incr(double from_c, double to_c, uint16_t togo_min);
+
+/*
+ * 1 if set_temp is outside kiln ± threshold (wait/catch-up).
+ * threshold < 0 or set_temp == 0 → always in-band (0).
+ */
+int PIDKiln_threshold_out_of_band(double kiln_temp, double set_temp, int16_t threshold);
+
+/* Time-proportioned SSR: 1 when heater should be on in the current window. */
+int PIDKiln_ssr_on(double pid_out, uint16_t window_ms, uint32_t window_start, uint32_t now,
+                   int divider);
+
+/* Advance window_start until within one window of now (catch-up after lag). */
+uint32_t PIDKiln_window_advance(uint32_t window_start, uint32_t now, uint16_t window_ms);
+
+/* Heat percent for UI: (pid_out / window) * 100 * divider; 0 if window == 0. */
+double PIDKiln_heat_percent(double pid_out, uint16_t window_ms, int divider);
+
+/* Program step FSM states (independent of firmware PROGRAM_RUN_STATE). */
+#define PIDKILN_FSM_RUNNING 0
+#define PIDKILN_FSM_PAUSED 1
+#define PIDKILN_FSM_THRESHOLD 2
+#define PIDKILN_FSM_ENDED 3
+
+/* Tick return codes */
+#define PIDKILN_FSM_OK 0
+#define PIDKILN_FSM_TICK_ENDED 1
+#define PIDKILN_FSM_TICK_ETA 2       /* pause/threshold stretch — refresh ETA */
+#define PIDKILN_FSM_TICK_ETA_RAMP 3  /* entered a new ramp phase */
+#define PIDKILN_FSM_TICK_ETA_DWELL 4 /* entered a new dwell phase */
+
+typedef struct {
+  const PIDKiln_ProgramStep *steps;
+  unsigned size;
+  int step;                 /* -1 before first */
+  int next_is_dwell;        /* after a ramp, next phase is dwell */
+  uint32_t next_step_end_s; /* absolute simulated/wall seconds */
+  uint8_t tick10;           /* cadence counter (like firmware cnt2) */
+  int state;                /* PIDKILN_FSM_* */
+  double set_temp;
+  float temp_incr;
+  int16_t threshold; /* -1 = off */
+} PIDKiln_ProgramFsm;
+
+/* Initialize FSM; first tick() performs the initial step transition. */
+void PIDKiln_program_fsm_start(PIDKiln_ProgramFsm *f, double kiln_temp, uint32_t now_s);
+
+/*
+ * Advance one second. Caller may set f->state to PAUSED/RUNNING before calling.
+ * kiln_temp is an input (measured or simulated). Updates set_temp / temp_incr / step / state.
+ */
+int PIDKiln_program_fsm_tick(PIDKiln_ProgramFsm *f, double kiln_temp, uint32_t now_s);
+
 #ifdef __cplusplus
 }
 #endif

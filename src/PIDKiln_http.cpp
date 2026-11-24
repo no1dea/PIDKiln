@@ -839,9 +839,7 @@ static void handleVarsJson(AsyncWebServerRequest *request) {
   }
   json_copy_escaped(log_path, sizeof(log_path), log_raw);
 
-  double heat_pct = 0;
-  if (telem.pid_window)
-    heat_pct = (telem.pid_out / (double)telem.pid_window) * 100.0 * PID_WINDOW_DIVIDER;
+  double heat_pct = PIDKiln_heat_percent(telem.pid_out, telem.pid_window, PID_WINDOW_DIVIDER);
 
   char body[768];
   snprintf(

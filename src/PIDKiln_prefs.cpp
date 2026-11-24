@@ -28,11 +28,11 @@ boolean Change_prefs_value(String item, String value){
         DBG dbgLog(LOG_DEBUG,"[PREFS]  -> For %s saved UINT16 item value:%d type:%d\n",PrefsName[a],Prefs[a].value.uint16,(int)Prefs[a].type);
         return true;
       }else if(Prefs[a].type==INT16){
-        Prefs[a].value.int16=(uint16_t)value.toInt();
+        Prefs[a].value.int16=(int16_t)value.toInt();
         DBG dbgLog(LOG_DEBUG,"[PREFS]  -> For %s saved INT16 item value:%d type:%d\n",PrefsName[a],Prefs[a].value.int16,(int)Prefs[a].type);
         return true;
       }else if(Prefs[a].type==INT32){
-        Prefs[a].value.int32=(uint32_t)value.toInt();
+        Prefs[a].value.int32=(int32_t)value.toInt();
         DBG dbgLog(LOG_DEBUG,"[PREFS]  -> For %s saved INT32 item value:%d type:%d\n",PrefsName[a],Prefs[a].value.int32,(int)Prefs[a].type);
         return true;
       }else if(Prefs[a].type==VFLOAT){
@@ -123,9 +123,10 @@ int pos=0;
 //
 void Prefs_updated_hook(){
 
-  // We have running program - update PID parameters
-  if(Program_run_state==PR_RUNNING || Program_run_state==PR_PAUSED){
-    KilnPID.SetTunings(Prefs[PRF_PID_KP].value.vfloat,Prefs[PRF_PID_KI].value.vfloat,Prefs[PRF_PID_KD].value.vfloat); // set actual PID parameters
+  // Live PID updates while a program is active (including threshold wait)
+  if(Program_run_state==PR_RUNNING || Program_run_state==PR_PAUSED || Program_run_state==PR_THRESHOLD){
+    KilnPID.SetTunings(Prefs[PRF_PID_KP].value.vfloat,Prefs[PRF_PID_KI].value.vfloat,Prefs[PRF_PID_KD].value.vfloat,Prefs[PRF_PID_POE].value.uint8);
+    KilnPID.SetOutputLimits(0, Prefs[PRF_PID_WINDOW].value.uint16/PID_WINDOW_DIVIDER);
   }
 }
 
@@ -214,7 +215,7 @@ char tmp[30];
         break;
       case PRF_PID_KP:
         Prefs[PRF_PID_KP].type=VFLOAT;
-        Prefs[PRF_PID_KP].value.vfloat=10;
+        Prefs[PRF_PID_KP].value.vfloat=20;
         break;
       case PRF_PID_KI:
         Prefs[PRF_PID_KI].type=VFLOAT;

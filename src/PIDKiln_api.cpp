@@ -46,15 +46,11 @@ static void api_get_status(AsyncWebServerRequest *request) {
   KilnTelemetry t;
   Kiln_ReadTelemetry(&t);
 
-  int heat_pct = 0;
-  if (t.pid_window > 0) {
-    heat_pct = (int)((t.pid_out * 100.0 * (double)PID_WINDOW_DIVIDER) /
-                     (double)t.pid_window);
-    if (heat_pct < 0)
-      heat_pct = 0;
-    if (heat_pct > 100)
-      heat_pct = 100;
-  }
+  int heat_pct = (int)PIDKiln_heat_percent(t.pid_out, t.pid_window, PID_WINDOW_DIVIDER);
+  if (heat_pct < 0)
+    heat_pct = 0;
+  if (heat_pct > 100)
+    heat_pct = 100;
 
   char name[MAX_PROGNAME + 1];
   name[0] = '\0';

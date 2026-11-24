@@ -2,6 +2,7 @@
 #include <PID_v1.h>
 #include <SPI.h>
 #include <LittleFS.h>
+#include <string.h>
 #include <PIDKilnLogic.h>
 #include "PIDKiln.h"
 
@@ -332,90 +333,67 @@ void Program_recalculate_ETA(boolean dwell){
 }
 
 
-// This is functional called every second - if program is running. It calculates temperature grow, sets targets etc.
+// Called every second while a program is active. Setpoint ramp / step FSM lives in PIDKilnLogic.
 //
 void Program_calculate_steps(boolean prg_start){
-static time_t step_start,next_step_end;
-static uint16_t cnt1=1,cnt2=1;
-static boolean is_it_dwell=false;
+static PIDKiln_ProgramFsm fsm;
+static uint16_t cnt1=1;
 
-  if(prg_start){  // starting program - do some startup stuff
-    Program_run_step=-1; cnt1=0;
-    next_step_end=0;         // there was no previous step - so it has ended NOW
-    cnt2=999;                // make sure we will parse first step
-    is_it_dwell=false;        // last step was dwell
+  if(prg_start){
+    cnt1=0;
+    memset(&fsm, 0, sizeof(fsm));
+    fsm.steps = (const PIDKiln_ProgramStep *)Program_run;
+    fsm.size = Program_run_size;
+    fsm.threshold = Prefs[PRF_PID_TEMP_THRESHOLD].value.int16;
+    PIDKiln_program_fsm_start(&fsm, kiln_temp, (uint32_t)time(NULL));
+    Program_run_step = fsm.step;
   }
 
-  // Logging stuff - cnt1 - counter for this. If Prefs[PRF_LOG_WINDOW].value.uint16 == 0 - no logging
+  // Logging — Prefs[PRF_LOG_WINDOW] == 0 disables
   cnt1++;
   if(Prefs[PRF_LOG_WINDOW].value.uint16 && cnt1>Prefs[PRF_LOG_WINDOW].value.uint16){
     cnt1=1;
     Add_log_line();
   }
-    
-  // Program recalc stuff - cnt2 - counter for it
-  cnt2++;
-  if(cnt2>10){
-    cnt2=1;
 
-    if(Program_run_state==PR_PAUSED){   // if we are paused - calculate new ETA end exit
-      Program_recalculate_ETA(false);
-      next_step_end+=10;                // this is not precise but should be enough
-      return;
-    }
+  fsm.steps = (const PIDKiln_ProgramStep *)Program_run;
+  fsm.size = Program_run_size;
+  fsm.threshold = Prefs[PRF_PID_TEMP_THRESHOLD].value.int16;
 
-    if(Prefs[PRF_PID_TEMP_THRESHOLD].value.int16>-1 && set_temp){       // check if we are in threshold window and there is temperature set already - if not, pause
-      //DBG Serial.printf("[PRG] Temperature in TEMP_THRESHOLD. Kiln_temp:%.1f Set_temp:%.1f Window:%d\n",kiln_temp,set_temp,Prefs[PRF_PID_TEMP_THRESHOLD].value.int16);
-      if(kiln_temp+Prefs[PRF_PID_TEMP_THRESHOLD].value.int16 < set_temp || kiln_temp-Prefs[PRF_PID_TEMP_THRESHOLD].value.int16 > set_temp){   // set_temp must be between kiln_temp +/- temp_threshold 
-        DBG dbgLog(LOG_INFO,"[PRG] Temperature in TEMP_THRESHOLD. Kiln_temp:%.1f Set_temp:%.1f Window:%d\n",kiln_temp,set_temp,(int)Prefs[PRF_PID_TEMP_THRESHOLD].value.int16);
-        //PAUSE_Program();
-        Program_run_state=PR_THRESHOLD;
-        Program_recalculate_ETA(false);
-        next_step_end+=10; 
-        return;
-      }else if(Program_run_state==PR_THRESHOLD) Program_run_state=PR_RUNNING;     
-    }
+  /* Sync user pause/resume into the FSM; leave THRESHOLD to the FSM. */
+  if(Program_run_state==PR_PAUSED)
+    fsm.state = PIDKILN_FSM_PAUSED;
+  else if(fsm.state==PIDKILN_FSM_PAUSED && Program_run_state==PR_RUNNING)
+    fsm.state = PIDKILN_FSM_RUNNING;
 
-    // calculate next step
-    if(time(NULL)>next_step_end){
-      DBG dbgLog(LOG_DEBUG,"[DBG] Calculating new step!\n");
-      if(!is_it_dwell){  // we have finished full step togo+dwell (or this is first step)
-        Program_run_step++; // lets icrement step
-        
-        if(Program_run_step>=Program_run_size){  //we have passed the last step - end program
-          END_Program();
-          return;
-        }
-        DBG dbgLog(LOG_DEBUG,"[PRG] Calculating new NORMAL step!\n");
-        is_it_dwell=true;   // next step will be dwell
-        step_start=time(NULL);
-        next_step_end=step_start+Program_run[Program_run_step].togo*60;
-        DBG dbgLog(LOG_DEBUG,"[PRG] Next step:%d Start step:%d Togo:%d Run_step:%d/%d Set_temp:%.3f\n",next_step_end,step_start,Program_run[Program_run_step].togo,Program_run_step,Program_run_size,set_temp);
-        
-        if(Program_run_step>0){ // is this a next step?
-          temp_incr=(float)(Program_run[Program_run_step].temp-Program_run[Program_run_step-1].temp)/(Program_run[Program_run_step].togo*60);
-          DBG dbgLog(LOG_DEBUG,"[PRG] temp_inc:%f Step_temp:%d Step-1_temp:%d\n",temp_incr,Program_run[Program_run_step].temp,Program_run[Program_run_step-1].temp);
-        }else{      // or this is teh first one?
-          DBG dbgLog(LOG_DEBUG,"[DBG] First step.\n");
-          set_temp=kiln_temp;
-          temp_incr=(float)(Program_run[Program_run_step].temp-kiln_temp)/(Program_run[Program_run_step].togo*60);
-        }
-        Program_recalculate_ETA(false);   // recalculate ETA for normal step
-      }else{
-        DBG dbgLog(LOG_DEBUG,"[DBG] Calculating new DWELL step!");
-        is_it_dwell=false;      // next step will be normal
-        temp_incr=0;
-        step_start=time(NULL);
-        next_step_end=step_start+Program_run[Program_run_step].dwell*60;
-        set_temp=Program_run[Program_run_step].temp;
-        DBG dbgLog(LOG_DEBUG,"[PRG] Next step:%d Start step:%d Togo:%d Run_step:%d/%d Set_temp:%f\n",next_step_end,step_start,Program_run[Program_run_step].dwell,Program_run_step,Program_run_size,set_temp);
-        Program_recalculate_ETA(true);  // recalculate ETA for dwell
-      }
-    }
-    DBG dbgLog(LOG_DEBUG,"[PRG] Curr temp: %.0f, Set_temp: %.0f, Incr: %.2f Pid_out:%.2f Step: %d\n", kiln_temp, set_temp, temp_incr, pid_out*PID_WINDOW_DIVIDER, Program_run_step);
+  int rc = PIDKiln_program_fsm_tick(&fsm, kiln_temp, (uint32_t)time(NULL));
+
+  set_temp = fsm.set_temp;
+  temp_incr = fsm.temp_incr;
+  Program_run_step = fsm.step;
+
+  if(rc==PIDKILN_FSM_TICK_ENDED){
+    END_Program();
+    return;
   }
 
-  if(Program_run_state!=PR_PAUSED && Program_run_state!=PR_THRESHOLD) set_temp+=temp_incr;  // increase desire temperature...
+  if(fsm.state==PIDKILN_FSM_THRESHOLD){
+    if(Program_run_state!=PR_THRESHOLD){
+      DBG dbgLog(LOG_INFO,"[PRG] Temperature in TEMP_THRESHOLD. Kiln_temp:%.1f Set_temp:%.1f Window:%d\n",
+                 kiln_temp,set_temp,(int)Prefs[PRF_PID_TEMP_THRESHOLD].value.int16);
+    }
+    Program_run_state=PR_THRESHOLD;
+  }else if(fsm.state==PIDKILN_FSM_RUNNING && Program_run_state!=PR_PAUSED){
+    Program_run_state=PR_RUNNING;
+  }
+
+  if(rc==PIDKILN_FSM_TICK_ETA || rc==PIDKILN_FSM_TICK_ETA_RAMP)
+    Program_recalculate_ETA(false);
+  else if(rc==PIDKILN_FSM_TICK_ETA_DWELL)
+    Program_recalculate_ETA(true);
+
+  DBG dbgLog(LOG_DEBUG,"[PRG] Curr temp: %.0f, Set_temp: %.0f, Incr: %.2f Pid_out:%.2f Step: %d\n",
+             kiln_temp, set_temp, temp_incr, pid_out*PID_WINDOW_DIVIDER, Program_run_step);
 }
 
 
@@ -448,7 +426,7 @@ void START_Program(){
   Program_calculate_steps(true);
   windowStartTime=millis();
 
-  //tell the PID to range between 0 and the full window size/PID_WINDOW_DIVIDER. It's divided by 100 (default value of PID_WINDOW_DIVIDER) to have minimal window size faster above 1/25s - so SSR will be able to switch (zero switch)
+  // PID output range is 0..PID_Window/PID_WINDOW_DIVIDER (divider defaults to 1) for time-proportioned SSR
   KilnPID.SetOutputLimits(0, Prefs[PRF_PID_WINDOW].value.uint16/PID_WINDOW_DIVIDER);
   KilnPID.SetSampleTime(1000); /* match 1 Hz TC update */
   KilnPID.SetMode(AUTOMATIC);
@@ -567,11 +545,9 @@ uint32_t now;
     if(Program_run_state==PR_RUNNING || Program_run_state==PR_PAUSED || Program_run_state==PR_THRESHOLD){
       KilnPID.Compute();
 
-      if (now - windowStartTime > Prefs[PRF_PID_WINDOW].value.uint16){ //time to shift the Relay Window
-        windowStartTime += Prefs[PRF_PID_WINDOW].value.uint16;
-      }
-      if (pid_out*PID_WINDOW_DIVIDER > now - windowStartTime) Kiln_SetSSR(true);
-      else Kiln_SetSSR(false);
+      uint16_t win = Prefs[PRF_PID_WINDOW].value.uint16;
+      windowStartTime = PIDKiln_window_advance(windowStartTime, now, win);
+      Kiln_SetSSR(PIDKiln_ssr_on(pid_out, win, windowStartTime, now, PID_WINDOW_DIVIDER) ? true : false);
     }
     //yield();
     vTaskDelay(10); // This should enable to run other tasks on this core

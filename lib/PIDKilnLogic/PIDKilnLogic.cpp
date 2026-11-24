@@ -223,3 +223,128 @@ uint32_t PIDKiln_eta_remaining_seconds(const PIDKiln_ProgramStep *steps, unsigne
   }
   return sec;
 }
+
+float PIDKiln_ramp_temp_incr(double from_c, double to_c, uint16_t togo_min) {
+  if (togo_min == 0)
+    return 0.0f;
+  return (float)((to_c - from_c) / ((double)togo_min * 60.0));
+}
+
+int PIDKiln_threshold_out_of_band(double kiln_temp, double set_temp, int16_t threshold) {
+  if (threshold < 0 || set_temp == 0.0)
+    return 0;
+  if (kiln_temp + (double)threshold < set_temp || kiln_temp - (double)threshold > set_temp)
+    return 1;
+  return 0;
+}
+
+int PIDKiln_ssr_on(double pid_out, uint16_t window_ms, uint32_t window_start, uint32_t now,
+                   int divider) {
+  if (window_ms == 0)
+    return 0;
+  return (pid_out * (double)divider > (double)(now - window_start)) ? 1 : 0;
+}
+
+uint32_t PIDKiln_window_advance(uint32_t window_start, uint32_t now, uint16_t window_ms) {
+  if (window_ms == 0)
+    return window_start;
+  while ((now - window_start) > (uint32_t)window_ms)
+    window_start += window_ms;
+  return window_start;
+}
+
+double PIDKiln_heat_percent(double pid_out, uint16_t window_ms, int divider) {
+  if (window_ms == 0)
+    return 0.0;
+  return (pid_out / (double)window_ms) * 100.0 * (double)divider;
+}
+
+void PIDKiln_program_fsm_start(PIDKiln_ProgramFsm *f, double kiln_temp, uint32_t now_s) {
+  (void)kiln_temp;
+  (void)now_s;
+  if (!f)
+    return;
+  f->step = -1;
+  f->next_is_dwell = 0;
+  f->next_step_end_s = 0;
+  /* Force first tick's 10s cadence block to run (mirrors firmware cnt2=999). */
+  f->tick10 = 10;
+  f->state = PIDKILN_FSM_RUNNING;
+  f->set_temp = 0.0;
+  f->temp_incr = 0.0f;
+}
+
+static void fsm_begin_ramp(PIDKiln_ProgramFsm *f, double kiln_temp, uint32_t now_s) {
+  const PIDKiln_ProgramStep *s = &f->steps[f->step];
+  f->next_is_dwell = 1;
+  f->next_step_end_s = now_s + (uint32_t)s->togo * 60u;
+
+  if (s->togo == 0) {
+    f->temp_incr = 0.0f;
+    f->set_temp = (double)s->temp;
+    return;
+  }
+
+  if (f->step > 0) {
+    double from = (double)f->steps[f->step - 1].temp;
+    f->temp_incr = PIDKiln_ramp_temp_incr(from, (double)s->temp, s->togo);
+  } else {
+    f->set_temp = kiln_temp;
+    f->temp_incr = PIDKiln_ramp_temp_incr(kiln_temp, (double)s->temp, s->togo);
+  }
+}
+
+static void fsm_begin_dwell(PIDKiln_ProgramFsm *f, uint32_t now_s) {
+  const PIDKiln_ProgramStep *s = &f->steps[f->step];
+  f->next_is_dwell = 0;
+  f->temp_incr = 0.0f;
+  f->set_temp = (double)s->temp;
+  f->next_step_end_s = now_s + (uint32_t)s->dwell * 60u;
+}
+
+int PIDKiln_program_fsm_tick(PIDKiln_ProgramFsm *f, double kiln_temp, uint32_t now_s) {
+  int rc = PIDKILN_FSM_OK;
+
+  if (!f || !f->steps || f->size == 0 || f->state == PIDKILN_FSM_ENDED)
+    return PIDKILN_FSM_TICK_ENDED;
+
+  f->tick10++;
+  if (f->tick10 > 10) {
+    f->tick10 = 1;
+
+    if (f->state == PIDKILN_FSM_PAUSED) {
+      f->next_step_end_s += 10;
+      return PIDKILN_FSM_TICK_ETA;
+    }
+
+    if (PIDKiln_threshold_out_of_band(kiln_temp, f->set_temp, f->threshold)) {
+      f->state = PIDKILN_FSM_THRESHOLD;
+      f->next_step_end_s += 10;
+      return PIDKILN_FSM_TICK_ETA;
+    } else if (f->state == PIDKILN_FSM_THRESHOLD) {
+      f->state = PIDKILN_FSM_RUNNING;
+    }
+
+    /* step < 0: no prior phase — due immediately (firmware used next_end=0 vs unix time). */
+    if (f->step < 0 || now_s > f->next_step_end_s) {
+      if (!f->next_is_dwell) {
+        f->step++;
+        if (f->step >= (int)f->size) {
+          f->state = PIDKILN_FSM_ENDED;
+          f->temp_incr = 0.0f;
+          return PIDKILN_FSM_TICK_ENDED;
+        }
+        fsm_begin_ramp(f, kiln_temp, now_s);
+        rc = PIDKILN_FSM_TICK_ETA_RAMP;
+      } else {
+        fsm_begin_dwell(f, now_s);
+        rc = PIDKILN_FSM_TICK_ETA_DWELL;
+      }
+    }
+  }
+
+  if (f->state != PIDKILN_FSM_PAUSED && f->state != PIDKILN_FSM_THRESHOLD)
+    f->set_temp += (double)f->temp_incr;
+
+  return rc;
+}

@@ -279,9 +279,10 @@ Useful in Wokwi: boot, WiFi/AP (limited), web UI, FreeRTOS tasks, Serial logs, b
 
 **Host unit tests (Unity / `[env:native]`):** requires a host C++ toolchain on `PATH` (MinGW-w64 or LLVM on Windows; `g++` on Linux/macOS). Suites:
 
-- `test/test_logic` — filenames, program-line parse, comments
+- `test/test_logic` — filenames, program JSON parse, comments
 - `test/test_safety` — temp / housing / runaway predicates
 - `test/test_program` — ETA and step-capacity helpers
+- `test/test_control` — setpoint ramp FSM, threshold/pause, SSR window, heat %
 
 ```
 pio test -e native
