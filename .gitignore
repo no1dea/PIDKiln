@@ -6,3 +6,5 @@
 *.pyc
 __pycache__/
 wokwi-serial.log
+node_modules/
+package-lock.json

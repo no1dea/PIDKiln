@@ -14,6 +14,34 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install PlatformIO
-        run: pip install -U platformio
+        run: pip install -r requirements-ci.txt
       - name: Run Unity suites
         run: pio test -e native
+
+  firmware-compile:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        env: [esp32-wrover-core, esp32-wrover-release]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install PlatformIO
+        run: pip install -r requirements-ci.txt
+      - name: Compile ${{ matrix.env }}
+        run: pio run -e ${{ matrix.env }}
+
+  format-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang-format
+        run: sudo apt-get update && sudo apt-get install -y clang-format
+      - name: clang-format dry-run (PIDKilnLogic + tests)
+        run: |
+          find lib/PIDKilnLogic test -type f \( -name '*.c' -o -name '*.cpp' -o -name '*.h' \) \
+            -print0 | xargs -0 clang-format --dry-run --Werror

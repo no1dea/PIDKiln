@@ -1,6 +1,8 @@
 # Dual-OTA layout with larger app slots (trade LittleFS for flash headroom).
 # app0/app1: 1408 KiB each (was 1280). FS: 1152 KiB (was 1408).
 # First flash of this table needs a full erase (partition offsets change).
+# Note: subtype "spiffs" is the ESP partition table label Arduino-ESP32 LittleFS
+# still mounts; the filesystem image itself is LittleFS (board_build.filesystem).
 # Name,   Type, SubType, Offset,  Size, Flags
 nvs,      data, nvs,     0x9000,  0x5000,
 otadata,  data, ota,     0xe000,  0x2000,

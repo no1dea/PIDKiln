@@ -154,7 +154,12 @@
       .then(function (data) {
         applyPayload(data, !full && !!lastSince);
       })
-      .catch(function () {});
+      .catch(function (err) {
+        if (typeof console !== "undefined" && console.warn) {
+          console.warn("[PIDKiln chart]", err && err.message ? err.message : err);
+        }
+        if (host) host.setAttribute("data-chart-error", "1");
+      });
   }
 
   function schedule() {

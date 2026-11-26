@@ -219,20 +219,27 @@ Peer to the browser UI — stable JSON, not HTML form fields. Auth: HTTP Basic (
 
 `GET /api/v1/status` fields: `kiln_c`, `set_c`, `case_c`, `int_c`, `state`, `error`, `step`, `steps`, `heat_pct`, `ramp_cps`; optional `run_name`, `start_ts`, `eta_ts` when a run is loaded.
 
-**Reserved (not implemented yet — omit handlers; documented for clients)**
+**Also implemented**
 
-- `GET /api/v1/telemetry`, `GET /api/v1/run`
-- `GET /api/v1/programs`, `GET /api/v1/programs/{name}`, later `PUT`/`DELETE`
+- `GET /api/v1/telemetry` — same JSON as `/status`
+- `GET /api/v1/run` — run name/state/step/timestamps
+- `GET /api/v1/programs` — `{programs:[{name,bytes,sel},…]}` from the on-device index
+
+**Still reserved (not implemented yet)**
+
+- `GET /api/v1/programs/{name}`, later `PUT`/`DELETE`
 - Logs list/get/delete; `GET /api/v1/system`, reboot; prefs read/`PATCH`
 - Never via API: firmware OTA, raw conf download, LCD/screenshot, secrets in JSON
 
-Smoke (device on LAN, default prefs `admin` / `hotashell`):
+See also [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (module map, auth, ESP32 4.x checklist, MQTT/HA future notes).
+
+Smoke (device on LAN). Shipped defaults leave `Auth_Password` empty (HTTP Basic off until you set one in Preferences). After setting a password:
 
 ```
-curl -u admin:hotashell http://<ip>/api/v1/status
-curl -u admin:hotashell -X POST http://<ip>/api/v1/run/pause
-curl -u admin:hotashell -X POST http://<ip>/api/v1/run/resume
-curl -u admin:hotashell -H "Content-Type: application/json" \
+curl -u admin:<password> http://<ip>/api/v1/status
+curl -u admin:<password> -X POST http://<ip>/api/v1/run/pause
+curl -u admin:<password> -X POST http://<ip>/api/v1/run/resume
+curl -u admin:<password> -H "Content-Type: application/json" \
   -d "{\"name\":\"program1.json\"}" http://<ip>/api/v1/programs/load
 ```
 

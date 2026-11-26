@@ -628,7 +628,9 @@
     };
     try {
       evt.target.setPointerCapture(evt.pointerId);
-    } catch (e) {}
+    } catch (e) {
+      /* Older browsers may lack setPointerCapture; drag still works via move/up. */
+    }
     evt.preventDefault();
     refresh();
   }

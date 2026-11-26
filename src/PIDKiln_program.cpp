@@ -327,7 +327,7 @@ void Program_recalculate_ETA(boolean dwell){
   Program_run_end = time(NULL);
   if (Program_run && Program_run_step >= 0) {
     Program_run_end += PIDKiln_eta_remaining_seconds(
-        (const PIDKiln_ProgramStep *)Program_run, (unsigned)Program_run_step,
+        Program_run, (unsigned)Program_run_step,
         Program_run_size, dwell ? 1 : 0);
   }
 }
@@ -342,7 +342,7 @@ static uint16_t cnt1=1;
   if(prg_start){
     cnt1=0;
     memset(&fsm, 0, sizeof(fsm));
-    fsm.steps = (const PIDKiln_ProgramStep *)Program_run;
+    fsm.steps = Program_run;
     fsm.size = Program_run_size;
     fsm.threshold = Prefs[PRF_PID_TEMP_THRESHOLD].value.int16;
     PIDKiln_program_fsm_start(&fsm, kiln_temp, (uint32_t)time(NULL));
@@ -356,7 +356,7 @@ static uint16_t cnt1=1;
     Add_log_line();
   }
 
-  fsm.steps = (const PIDKiln_ProgramStep *)Program_run;
+  fsm.steps = Program_run;
   fsm.size = Program_run_size;
   fsm.threshold = Prefs[PRF_PID_TEMP_THRESHOLD].value.int16;
 

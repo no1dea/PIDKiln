@@ -40,7 +40,7 @@ static void Power_Loop(void *parameter) {
   (void)parameter;
   for (;;) {
     Read_Energy_INPUT();
-    vTaskDelay(ENERGY_POLL_MS / portTICK_PERIOD_MS);
+    vTaskDelay(pdMS_TO_TICKS(ENERGY_POLL_MS));
   }
 }
 

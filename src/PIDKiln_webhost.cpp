@@ -9,8 +9,14 @@ static bool s_begun = false;
 AsyncWebServer &WebHost_Server() { return s_server; }
 
 bool WebHost_Auth(AsyncWebServerRequest *request) {
-  if (!request->authenticate(Prefs[PRF_AUTH_USER].value.str,
-                             Prefs[PRF_AUTH_PASS].value.str, NULL, false)) {
+  const char *user = Prefs[PRF_AUTH_USER].value.str;
+  const char *pass = Prefs[PRF_AUTH_PASS].value.str;
+  /* Empty password = auth disabled (first-boot). Set Auth_Password before LAN exposure. */
+  if (!pass || !pass[0])
+    return true;
+  if (!user)
+    user = "";
+  if (!request->authenticate(user, pass, NULL, false)) {
     request->requestAuthentication(NULL, false);
     return false;
   }

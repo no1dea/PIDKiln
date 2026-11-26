@@ -8,17 +8,12 @@
 #include <string.h>
 #include "PIDKiln.h"
 #include "PIDKiln_webhost.h"
-#if PK_FEATURE_LOCAL_UI
-#include <U8g2lib.h>
-extern U8G2_ST7920_128X64_F_HW_SPI u8g2;
-#endif
+#include "PIDKiln_http_internal.h"
 
 boolean delete_file(File &newFile);
 boolean check_valid_chars(byte a);
 boolean valid_filename(char *file);
 
-#define server WebHost_Server()
-#define _webAuth WebHost_Auth
 
 // Other variables
 //
@@ -258,7 +253,7 @@ static void html_escape_write(AsyncResponseStream *response, const char *s) {
   }
 }
 
-static String html_escape_string(const char *s) {
+String html_escape_string(const char *s) {
   String out;
   if (!s)
     return out;
@@ -637,83 +632,6 @@ static char upload_path[MAX_FILENAME + 1];
 }
 
 
-/* Filled by GET_Handle_Delete for ~PROGRAM_NAME~ substitution. */
-static char g_delete_prog_name[MAX_PROGNAME + 1];
-
-String Delete_parser(const String &var) {
-  if (var == "PROGRAM_NAME")
-    return html_escape_string(g_delete_prog_name);
-  return String();
-}
-
-// Handle delete - second run, post - actual deletion
-//
-void POST_Handle_Delete(AsyncWebServerRequest *request) {
-  if (!_webAuth(request))
-    return;
-
-  /* Rely on submit button name="yes" (not the display value). */
-  if (request->hasParam("prog_name", true) && request->hasParam("yes", true)) {
-    const AsyncWebParameter *p = request->getParam("prog_name", true);
-    char path[32];
-    sprintf(path, "%s/%.*s", PRG_Directory, MAX_PROGNAME, p->value().c_str());
-    DBG dbgLog(LOG_DEBUG, "[HTTP] Removing program: %s with fpath:%s\n",
-               p->value().c_str(), path);
-    if (LittleFS.exists(path)) {
-      LittleFS.remove(path);
-      Generate_INDEX();
-    }
-  }
-  request->redirect("/programs");
-}
-
-// Handle delete - first run, get - are you sure question
-//
-void GET_Handle_Delete(AsyncWebServerRequest *request) {
-  DBG dbgLog(LOG_DEBUG, "[HTTP]  Request type: %d\n", request->method());
-  DBG dbgLog(LOG_DEBUG, "[HTTP]  Request url: %s\n", request->url().c_str());
-
-  if (!request->hasParam("prog_name") || !LittleFS.exists("/delete.html")) {
-    DBG dbgLog(LOG_ERR, "[HTTP]  Failed to find GET prog_name or delete.html");
-    request->redirect("/programs");
-    return;
-  }
-
-  const AsyncWebParameter *p = request->getParam("prog_name");
-  strncpy(g_delete_prog_name, p->value().c_str(), MAX_PROGNAME);
-  g_delete_prog_name[MAX_PROGNAME] = '\0';
-
-  request->send(LittleFS, "/delete.html", String(), false, Delete_parser);
-}
-
-
-// Load program from file to memory
-//
-void GET_Handle_Load(AsyncWebServerRequest *request){
-char prname[MAX_FILENAME];
-
-  if(!request->hasParam("prog_name")){  // if no program to load - skip
-    DBG dbgLog(LOG_ERR,"[HTTP] Failed to load program - no program name");
-    request->redirect("/programs");
-    return;
-  }
-
-  const AsyncWebParameter* p = request->getParam("prog_name");
-  strcpy(prname,p->value().c_str());
-  if(!Load_program(prname)){
-    request->redirect("/index.html");
-    Load_program_to_run();
-    return;
-  }else{
-    DBG dbgLog(LOG_ERR,"[HTTP] Failed to load program - Load_program() failed");
-    request->redirect("/programs");
-    return;
-  }
-}
-
-
-// Handle prefs upload
-//
 void handlePrefs(AsyncWebServerRequest *request){
 boolean save=false;
 
@@ -866,78 +784,20 @@ static void handleVarsJson(AsyncWebServerRequest *request) {
 }
 
 
-// Function(s) writing LCD screenshot over WWW - not perfect - but working
-//
-char *screenshot;
-#if PK_FEATURE_LOCAL_UI
-void out(const char *s){strcat(screenshot,s);}
-void do_screenshot(AsyncWebServerRequest *request){
-
-  screenshot=(char *)MALLOC(SCREEN_W*SCREEN_H*2*sizeof(char)+1);
-  if(screenshot==NULL){
-    DBG dbgLog(LOG_ERR,"[HTTP] Failed to allocate memory for screenshot");
-    request->send(500);
-    return;
-  }
-  *screenshot='\0';
-
-  AsyncResponseStream *response = request->beginResponseStream("image/x-portable-bitmap");
-  response->addHeader("Server","ESP Async Web Server");
-  response->addHeader("Content-Disposition","attachment; filename=\"PIDKiln_screenshot.pbm\"");
-
-  u8g2_WriteBufferPBM2(u8g2.getU8g2(),out);
-  response->println(screenshot);
-  free(screenshot); screenshot=NULL;
-  
-  request->send(response);
-}
-#endif
-
-
-// Firmware-only upload/update (from https://github.com/lbernstone/asyncUpdate/blob/master/AsyncUpdate.ino).
-// LittleFS images are not updated over HTTP — use PlatformIO uploadfs.
-//
-void handleDoUpdate(AsyncWebServerRequest *request, const String& filename, size_t index, uint8_t *data, size_t len, bool final) {
-  (void)filename;
-  if (!index){
-    DBG dbgLog(LOG_INFO,"[HTTP] Beginning firmware update\n");
-    if (!Update.begin(UPDATE_SIZE_UNKNOWN, U_FLASH)) {
-      Update.printError(Serial);
-    }
-  }
-
-  if (Update.write(data, len) != len) {
-    Update.printError(Serial);
-  }
-
-  if (final) {
-    AsyncWebServerResponse *response = request->beginResponse(200, "text/plain", "Please wait while the device reboots...");
-    response->addHeader("Refresh", "20; url=/about.html");
-    response->addHeader("Connection", "close");
-    request->send(response);
-    delay(1000);
-    if (!Update.end(true)){
-      Update.printError(Serial);
-    } else {
-      DBG Serial.println("[HTTP] Update complete");
-      DBG Serial.flush();
-      Restart_ESP();
-    }
-  }
+static void optionally_auth_static(AsyncStaticWebHandler &handler) {
+  const char *user = Prefs[PRF_AUTH_USER].value.str;
+  const char *pass = Prefs[PRF_AUTH_PASS].value.str;
+  if (pass && pass[0])
+    handler.setAuthentication(user ? user : "", pass);
 }
 
-
-/* 
-** Setup Webserver UI routes (server begin is WebHost_Begin from net).
-**
-*/
 void SETUP_WebServer(void) {
   // Route for root / web page
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){
     request->redirect("/index.html");
   });
 
-  server.serveStatic("/index.html", LittleFS, "/index.html").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
+  optionally_auth_static(server.serveStatic("/index.html", LittleFS, "/index.html"));
 
   server.on("/index.html", HTTP_POST, handleIndexPost);
   
@@ -973,8 +833,8 @@ void SETUP_WebServer(void) {
   server.on("/programs/index.html", HTTP_GET, handleProgramsIndex);
   server.on("/logs/", HTTP_GET, handleLogsIndex);
   server.on("/logs/index.html", HTTP_GET, handleLogsIndex);
-  server.serveStatic("/programs/", LittleFS, "/programs/").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
-  server.serveStatic("/logs/", LittleFS, "/logs/").setAuthentication(Prefs[PRF_AUTH_USER].value.str,Prefs[PRF_AUTH_PASS].value.str);
+  optionally_auth_static(server.serveStatic("/programs/", LittleFS, "/programs/"));
+  optionally_auth_static(server.serveStatic("/logs/", LittleFS, "/logs/"));
 
   // Upload new programs
   server.on("/upload", HTTP_POST, [](AsyncWebServerRequest *request){

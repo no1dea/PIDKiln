@@ -78,8 +78,8 @@ File prf;
 //
 void Load_prefs(){
 File prf;
-String line,item,value;
-int pos=0;
+String line;
+char item[64], value[192];
 
   DBG dbgLog(LOG_INFO,"[PREFS] Loading prefs from file");
   if(prf=LittleFS.open(PREFS_FILE,"r"))
@@ -95,26 +95,26 @@ int pos=0;
           line.trim();
         }
       }
-      // Now we have a clean line - parse it
-      if((pos=line.indexOf("="))>2){          // we need to have = sign - if not, ignore
-        item=line.substring(0,pos-1);
-        item.trim();
-        value=line.substring(pos+1);
-        value.trim();
-        //DBG Serial.printf("[PREFS] Preference (=@%d) item: '%s' = '%s'\n",pos,item.c_str(),value.c_str());
-        
-        if(item.length()>2 && value.length()>0) Change_prefs_value(item,value);
-      }
+      if(!PIDKiln_prefs_split_kv(line.c_str(), item, sizeof(item), value, sizeof(value)))
+        continue;
+      /* Allow empty values so conf can clear passwords / optional fields. */
+      if(item[0])
+        Change_prefs_value(String(item), String(value));
     }
 
-    // For debuging only
+    // For debugging only — never print secrets (WiFi/auth passwords)
     DBG dbgLog(LOG_DEBUG,"[PREFS] -=-=-= PREFS DISPLAY =-=-=-");
     for(uint16_t a=0; a<PRF_end; a++){
-      if(Prefs[a].type==STRING) DBG dbgLog(LOG_DEBUG,"[PREFS] %d) '%s' = '%s'\t%d\n",a,PrefsName[a],Prefs[a].value.str,(int)Prefs[a].type);
+      if(Prefs[a].type==STRING){
+        const bool secret = (a == PRF_WIFI_PASS || a == PRF_WIFI_AP_PASS || a == PRF_AUTH_PASS);
+        DBG dbgLog(LOG_DEBUG,"[PREFS] %d) '%s' = '%s'\t%d\n",a,PrefsName[a],
+                   secret ? (Prefs[a].value.str && Prefs[a].value.str[0] ? "(set)" : "(empty)")
+                          : Prefs[a].value.str,(int)Prefs[a].type);
+      }
       if(Prefs[a].type==UINT8) DBG dbgLog(LOG_DEBUG,"[PREFS] %d) '%s' = '%d'\t%d\n",a,PrefsName[a],Prefs[a].value.uint8,(int)Prefs[a].type);
       if(Prefs[a].type==UINT16) DBG dbgLog(LOG_DEBUG,"[PREFS] %d) '%s' = '%d'\t%d\n",a,PrefsName[a],Prefs[a].value.uint16,(int)Prefs[a].type);
       if(Prefs[a].type==INT16) DBG dbgLog(LOG_DEBUG,"[PREFS] %d) '%s' = '%d'\t%d\n",a,PrefsName[a],Prefs[a].value.int16,(int)Prefs[a].type);
-      if(Prefs[a].type==INT32) DBG dbgLog(LOG_DEBUG,"[PREFS] %d) '%s' = '%d'\t%d\n",a,PrefsName[a],Prefs[a].value.int16,(int)Prefs[a].type);
+      if(Prefs[a].type==INT32) DBG dbgLog(LOG_DEBUG,"[PREFS] %d) '%s' = '%d'\t%d\n",a,PrefsName[a],Prefs[a].value.int32,(int)Prefs[a].type);
     }
 }
 
@@ -163,7 +163,7 @@ char tmp[30];
         break;
       case PRF_WIFI_AP_PASS:
         Prefs[PRF_WIFI_AP_PASS].type=STRING;
-        Prefs[PRF_WIFI_AP_PASS].value.str=strdup("hotashell");
+        Prefs[PRF_WIFI_AP_PASS].value.str=strdup("");
         break;
 
       case PRF_HTTP_JS_LOCAL:
@@ -177,7 +177,7 @@ char tmp[30];
         break;
       case PRF_AUTH_PASS:
         Prefs[PRF_AUTH_PASS].type=STRING;
-        Prefs[PRF_AUTH_PASS].value.str=strdup("hotashell");
+        Prefs[PRF_AUTH_PASS].value.str=strdup("");
         break;
 
       case PRF_NTPSERVER1:

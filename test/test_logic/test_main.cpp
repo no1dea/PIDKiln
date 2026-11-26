@@ -40,15 +40,15 @@ static void test_rate_to_togo(void) {
 }
 
 static void test_parse_json_ramp_min(void) {
-  const char *json =
-      "{"
-      "\"schema\":\"pidkiln.program/v1\","
-      "\"description\":\"unit test\","
-      "\"steps\":[{\"target_c\":95,\"ramp_min\":30,\"hold_min\":20},"
-      "{\"target_c\":134,\"ramp_min\":20,\"hold_min\":30}]"
-      "}";
+  const char *json = "{"
+                     "\"schema\":\"pidkiln.program/v1\","
+                     "\"description\":\"unit test\","
+                     "\"steps\":[{\"target_c\":95,\"ramp_min\":30,\"hold_min\":20},"
+                     "{\"target_c\":134,\"ramp_min\":20,\"hold_min\":30}]"
+                     "}";
   PIDKiln_ProgramParsed out;
-  TEST_ASSERT_EQUAL_INT(PIDKILN_PRG_OK, PIDKiln_parse_program_json(json, strlen(json), 1350, NULL, &out));
+  TEST_ASSERT_EQUAL_INT(PIDKILN_PRG_OK,
+                        PIDKiln_parse_program_json(json, strlen(json), 1350, NULL, &out));
   TEST_ASSERT_EQUAL_UINT(2, out.size);
   TEST_ASSERT_EQUAL_UINT16(95, out.steps[0].temp);
   TEST_ASSERT_EQUAL_UINT16(30, out.steps[0].togo);
@@ -60,15 +60,15 @@ static void test_parse_json_ramp_min(void) {
 }
 
 static void test_parse_json_rate_with_assume_start(void) {
-  const char *json =
-      "{"
-      "\"schema\":\"pidkiln.program/v1\","
-      "\"assume_start_c\":25,"
-      "\"steps\":[{\"target_c\":45,\"rate_c_per_h\":240,\"hold_min\":5},"
-      "{\"target_c\":30,\"rate_c_per_h\":180,\"hold_min\":5}]"
-      "}";
+  const char *json = "{"
+                     "\"schema\":\"pidkiln.program/v1\","
+                     "\"assume_start_c\":25,"
+                     "\"steps\":[{\"target_c\":45,\"rate_c_per_h\":240,\"hold_min\":5},"
+                     "{\"target_c\":30,\"rate_c_per_h\":180,\"hold_min\":5}]"
+                     "}";
   PIDKiln_ProgramParsed out;
-  TEST_ASSERT_EQUAL_INT(PIDKILN_PRG_OK, PIDKiln_parse_program_json(json, strlen(json), 1350, NULL, &out));
+  TEST_ASSERT_EQUAL_INT(PIDKILN_PRG_OK,
+                        PIDKiln_parse_program_json(json, strlen(json), 1350, NULL, &out));
   TEST_ASSERT_EQUAL_UINT(2, out.size);
   TEST_ASSERT_TRUE(out.has_assume_start);
   TEST_ASSERT_EQUAL_INT16(25, out.assume_start_c);
@@ -81,13 +81,13 @@ static void test_parse_json_rate_with_assume_start(void) {
 }
 
 static void test_parse_json_rate_step0_unresolved_without_start(void) {
-  const char *json =
-      "{"
-      "\"schema\":\"pidkiln.program/v1\","
-      "\"steps\":[{\"target_c\":45,\"rate_c_per_h\":240,\"hold_min\":5}]"
-      "}";
+  const char *json = "{"
+                     "\"schema\":\"pidkiln.program/v1\","
+                     "\"steps\":[{\"target_c\":45,\"rate_c_per_h\":240,\"hold_min\":5}]"
+                     "}";
   PIDKiln_ProgramParsed out;
-  TEST_ASSERT_EQUAL_INT(PIDKILN_PRG_OK, PIDKiln_parse_program_json(json, strlen(json), 1350, NULL, &out));
+  TEST_ASSERT_EQUAL_INT(PIDKILN_PRG_OK,
+                        PIDKiln_parse_program_json(json, strlen(json), 1350, NULL, &out));
   TEST_ASSERT_EQUAL_UINT16(0, out.steps[0].togo);
   TEST_ASSERT_EQUAL_UINT16(240, out.rate_c_per_h[0]);
 
@@ -96,12 +96,11 @@ static void test_parse_json_rate_step0_unresolved_without_start(void) {
 }
 
 static void test_parse_json_rate_with_measured_start(void) {
-  const char *json =
-      "{"
-      "\"schema\":\"pidkiln.program/v1\","
-      "\"assume_start_c\":99,"
-      "\"steps\":[{\"target_c\":45,\"rate_c_per_h\":240,\"hold_min\":5}]"
-      "}";
+  const char *json = "{"
+                     "\"schema\":\"pidkiln.program/v1\","
+                     "\"assume_start_c\":99,"
+                     "\"steps\":[{\"target_c\":45,\"rate_c_per_h\":240,\"hold_min\":5}]"
+                     "}";
   int measured = 25;
   PIDKiln_ProgramParsed out;
   TEST_ASSERT_EQUAL_INT(PIDKILN_PRG_OK,
@@ -112,12 +111,10 @@ static void test_parse_json_rate_with_measured_start(void) {
 
 static void test_parse_json_rejects_both_or_neither_ramp(void) {
   PIDKiln_ProgramParsed out;
-  const char *both =
-      "{\"schema\":\"pidkiln.program/v1\",\"steps\":["
-      "{\"target_c\":95,\"ramp_min\":30,\"rate_c_per_h\":100,\"hold_min\":20}]}";
-  const char *neither =
-      "{\"schema\":\"pidkiln.program/v1\",\"steps\":["
-      "{\"target_c\":95,\"hold_min\":20}]}";
+  const char *both = "{\"schema\":\"pidkiln.program/v1\",\"steps\":["
+                     "{\"target_c\":95,\"ramp_min\":30,\"rate_c_per_h\":100,\"hold_min\":20}]}";
+  const char *neither = "{\"schema\":\"pidkiln.program/v1\",\"steps\":["
+                        "{\"target_c\":95,\"hold_min\":20}]}";
   TEST_ASSERT_EQUAL_INT(PIDKILN_PRG_ERR_STEP,
                         PIDKiln_parse_program_json(both, strlen(both), 1350, NULL, &out));
   TEST_ASSERT_EQUAL_INT(PIDKILN_PRG_ERR_STEP,
@@ -126,9 +123,8 @@ static void test_parse_json_rejects_both_or_neither_ramp(void) {
 
 static void test_parse_json_rejects_hot_and_bad_schema(void) {
   PIDKiln_ProgramParsed out;
-  const char *hot =
-      "{\"schema\":\"pidkiln.program/v1\",\"steps\":["
-      "{\"target_c\":1360,\"ramp_min\":10,\"hold_min\":0}]}";
+  const char *hot = "{\"schema\":\"pidkiln.program/v1\",\"steps\":["
+                    "{\"target_c\":1360,\"ramp_min\":10,\"hold_min\":0}]}";
   const char *bad =
       "{\"schema\":\"other\",\"steps\":[{\"target_c\":10,\"ramp_min\":1,\"hold_min\":0}]}";
   TEST_ASSERT_EQUAL_INT(PIDKILN_PRG_ERR_TEMP,
@@ -138,20 +134,19 @@ static void test_parse_json_rejects_hot_and_bad_schema(void) {
 }
 
 static void test_parse_sample_program1_json(void) {
-  const char *json =
-      "{"
-      "\"schema\":\"pidkiln.program/v1\","
-      "\"name\":\"program1\","
-      "\"description\":\"Short, clear description of the program.\","
-      "\"steps\":["
-      "{\"target_c\":95,\"ramp_min\":30,\"hold_min\":20},"
-      "{\"target_c\":134,\"rate_c_per_h\":117,\"hold_min\":30},"
-      "{\"target_c\":97,\"ramp_min\":80,\"hold_min\":30},"
-      "{\"target_c\":360,\"ramp_min\":180,\"hold_min\":20},"
-      "{\"target_c\":600,\"ramp_min\":100,\"hold_min\":30},"
-      "{\"target_c\":970,\"ramp_min\":120,\"hold_min\":50},"
-      "{\"target_c\":600,\"ramp_min\":90,\"hold_min\":0}"
-      "]}";
+  const char *json = "{"
+                     "\"schema\":\"pidkiln.program/v1\","
+                     "\"name\":\"program1\","
+                     "\"description\":\"Short, clear description of the program.\","
+                     "\"steps\":["
+                     "{\"target_c\":95,\"ramp_min\":30,\"hold_min\":20},"
+                     "{\"target_c\":134,\"rate_c_per_h\":117,\"hold_min\":30},"
+                     "{\"target_c\":97,\"ramp_min\":80,\"hold_min\":30},"
+                     "{\"target_c\":360,\"ramp_min\":180,\"hold_min\":20},"
+                     "{\"target_c\":600,\"ramp_min\":100,\"hold_min\":30},"
+                     "{\"target_c\":970,\"ramp_min\":120,\"hold_min\":50},"
+                     "{\"target_c\":600,\"ramp_min\":90,\"hold_min\":0}"
+                     "]}";
   PIDKiln_ProgramParsed out;
   int start = 20;
   TEST_ASSERT_EQUAL_INT(PIDKILN_PRG_OK,
@@ -167,6 +162,22 @@ static void test_inline_comment_pos(void) {
   TEST_ASSERT_EQUAL_INT(0, PIDKiln_inline_comment_pos("# full line comment"));
   TEST_ASSERT_EQUAL_INT(9, PIDKiln_inline_comment_pos("95:30:20 # dwell"));
   TEST_ASSERT_EQUAL_INT(-1, PIDKiln_inline_comment_pos("95:30:20"));
+}
+
+static void test_prefs_split_kv(void) {
+  char key[64], val[64];
+  TEST_ASSERT_TRUE(
+      PIDKiln_prefs_split_kv("Auth_Username = admin", key, sizeof(key), val, sizeof(val)));
+  TEST_ASSERT_EQUAL_STRING("Auth_Username", key);
+  TEST_ASSERT_EQUAL_STRING("admin", val);
+  TEST_ASSERT_TRUE(PIDKiln_prefs_split_kv("Auth_Password=", key, sizeof(key), val, sizeof(val)));
+  TEST_ASSERT_EQUAL_STRING("Auth_Password", key);
+  TEST_ASSERT_EQUAL_STRING("", val);
+  TEST_ASSERT_TRUE(PIDKiln_prefs_split_kv("WiFi_Mode=1", key, sizeof(key), val, sizeof(val)));
+  TEST_ASSERT_EQUAL_STRING("WiFi_Mode", key);
+  TEST_ASSERT_EQUAL_STRING("1", val);
+  TEST_ASSERT_FALSE(PIDKiln_prefs_split_kv("noequals", key, sizeof(key), val, sizeof(val)));
+  TEST_ASSERT_FALSE(PIDKiln_prefs_split_kv("=novaluekey", key, sizeof(key), val, sizeof(val)));
 }
 
 static void test_can_add_program_step(void) {
@@ -195,6 +206,7 @@ int main(int argc, char **argv) {
   RUN_TEST(test_parse_json_rejects_hot_and_bad_schema);
   RUN_TEST(test_parse_sample_program1_json);
   RUN_TEST(test_inline_comment_pos);
+  RUN_TEST(test_prefs_split_kv);
   RUN_TEST(test_can_add_program_step);
   return UNITY_END();
 }

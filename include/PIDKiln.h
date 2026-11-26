@@ -95,12 +95,11 @@ extern const uint8_t SCR_MENU_LINES;
 extern const uint8_t SCR_MENU_SPACE;
 extern const uint8_t SCR_MENU_MIDDLE;
 
-struct PROGRAM {
-  uint16_t temp;
-  uint16_t togo;
-  uint16_t dwell;
-};
-#define MAX_PRG_LENGTH 40
+/* Same layout as PIDKiln_ProgramStep — single source of truth in PIDKilnLogic. */
+typedef PIDKiln_ProgramStep PROGRAM;
+#define MAX_PRG_LENGTH PIDKILN_PROGRAM_MAX_STEPS
+static_assert(sizeof(PROGRAM) == sizeof(PIDKiln_ProgramStep),
+              "PROGRAM must stay identical to PIDKiln_ProgramStep");
 
 extern PROGRAM Program[MAX_PRG_LENGTH];
 extern uint16_t Program_rate_c_per_h[MAX_PRG_LENGTH]; /* 0 = ramp_min authored */
@@ -168,8 +167,6 @@ extern uint16_t Logs_DIR_size;
 #define PRG_DIRECTORY_X(x) PRG_DIRECTORY x
 extern const char *PRG_Directory;
 extern const char *LOG_Directory;
-
-#define FORMAT_LITTLEFS_IF_FAILED true
 
 #define PREFS_FILE "/etc/pidkiln.conf"
 
@@ -243,6 +240,12 @@ extern const char *PDate;
 
 #ifndef DEBUG
 #define DEBUG 1
+#endif
+/* Format empty flash on first boot when DEBUG; release never auto-wipes data. */
+#if DEBUG
+#define FORMAT_LITTLEFS_IF_FAILED true
+#else
+#define FORMAT_LITTLEFS_IF_FAILED false
 #endif
 #ifndef MALLOC
 #define MALLOC ps_malloc

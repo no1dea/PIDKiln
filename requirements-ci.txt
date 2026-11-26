@@ -1,0 +1,2 @@
+# Pinned for GitHub Actions (native tests + firmware compile).
+platformio==6.1.18

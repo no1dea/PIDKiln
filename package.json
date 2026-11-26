@@ -1,0 +1,8 @@
+{
+  "name": "pidkiln-webassets",
+  "private": true,
+  "description": "Pinned tools for LittleFS web asset minify/compress",
+  "devDependencies": {
+    "terser": "5.37.0"
+  }
+}

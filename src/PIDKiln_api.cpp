@@ -232,11 +232,66 @@ static void api_programs_load(AsyncWebServerRequest *request) {
   request->send(204);
 }
 
+static void api_get_run(AsyncWebServerRequest *request) {
+  if (!WebHost_Auth(request))
+    return;
+
+  KilnTelemetry t;
+  Kiln_ReadTelemetry(&t);
+
+  char name[MAX_PROGNAME + 1];
+  name[0] = '\0';
+  if (Program_run_name && Program_run_name[0]) {
+    strncpy(name, Program_run_name, MAX_PROGNAME);
+    name[MAX_PROGNAME] = '\0';
+  }
+
+  char buf[256];
+  snprintf(buf, sizeof(buf),
+           "{\"state\":%u,\"error\":%u,\"step\":%d,\"steps\":%u,\"name\":\"%s\","
+           "\"start_ts\":%ld,\"eta_ts\":%ld}",
+           (unsigned)t.program_run_state, (unsigned)t.program_error,
+           t.program_run_step < 0 ? -1 : t.program_run_step + 1,
+           (unsigned)t.program_run_size, name, (long)t.program_run_start,
+           (long)t.program_run_end);
+  api_send_json(request, 200, buf);
+}
+
+static void api_get_telemetry(AsyncWebServerRequest *request) {
+  /* Same payload as /status for clients that prefer a telemetry-named path. */
+  api_get_status(request);
+}
+
+static void api_get_programs(AsyncWebServerRequest *request) {
+  if (!WebHost_Auth(request))
+    return;
+
+  AsyncResponseStream *response =
+      request->beginResponseStream("application/json; charset=utf-8");
+  response->print("{\"programs\":[");
+  bool first = true;
+  for (uint16_t a = 0; a < Programs_DIR_size; a++) {
+    if (!Programs_DIR[a].filename[0])
+      continue;
+    if (!first)
+      response->print(",");
+    first = false;
+    response->printf("{\"name\":\"%s\",\"bytes\":%u,\"sel\":%u}",
+                     Programs_DIR[a].filename, (unsigned)Programs_DIR[a].filesize,
+                     (unsigned)Programs_DIR[a].sel);
+  }
+  response->print("]}");
+  request->send(response);
+}
+
 void SETUP_Api(void) {
   server.on("/api/v1", HTTP_GET, api_get_root);
   server.on("/api/v1/", HTTP_GET, api_get_root);
   server.on("/api/v1/health", HTTP_GET, api_get_health);
   server.on("/api/v1/status", HTTP_GET, api_get_status);
+  server.on("/api/v1/telemetry", HTTP_GET, api_get_telemetry);
+  server.on("/api/v1/run", HTTP_GET, api_get_run);
+  server.on("/api/v1/programs", HTTP_GET, api_get_programs);
 
   server.on("/api/v1/run/start", HTTP_POST, api_run_start);
   server.on("/api/v1/run/pause", HTTP_POST, api_run_pause);

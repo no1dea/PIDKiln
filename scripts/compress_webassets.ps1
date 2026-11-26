@@ -54,12 +54,23 @@ $largeLibsOnlyGz = @(
   "data\css\uPlot.min.css"
 )
 
-# Minify curve editor before gzip (edit program_editor.src.js; npx terser builds .js)
+# Minify curve editor before gzip (edit program_editor.src.js; local pinned terser builds .js)
 $editorJs = Join-Path $root "data\js\program_editor.js"
 $editorSrc = Join-Path $root "data\js\program_editor.src.js"
 if (Test-Path $editorSrc) {
   Write-Host "Minifying program_editor.src.js -> program_editor.js ..."
-  npx --yes terser $editorSrc -c -m -o $editorJs
+  $pkg = Join-Path $root "package.json"
+  $nmTerser = Join-Path $root "node_modules\terser\bin\terser"
+  if (-not (Test-Path $nmTerser)) {
+    Write-Host "Installing pinned terser from package.json ..."
+    Push-Location $root
+    try { npm install --no-fund --no-audit } finally { Pop-Location }
+  }
+  if (Test-Path $nmTerser) {
+    node $nmTerser $editorSrc -c -m -o $editorJs
+  } else {
+    npx --no-install terser $editorSrc -c -m -o $editorJs
+  }
   if ($LASTEXITCODE -ne 0) { throw "terser failed for program_editor" }
 }
 

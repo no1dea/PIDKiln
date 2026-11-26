@@ -124,7 +124,7 @@ void Input_Loop(void * parameter) {
 
   for(;;){
     if(encoderButton){
-      vTaskDelay( ENCODER_BUTTON_DELAY / portTICK_PERIOD_MS );
+      vTaskDelay(pdMS_TO_TICKS(ENCODER_BUTTON_DELAY));
       if(digitalRead(ENCODER0_BUTTON)!=LOW){ // Button is still pressed - skip, perhaps it's a long press
         if(encoderButton+Long_Press>=millis()){ // quick press
           DBG dbgLog(LOG_DEBUG,"[INPUT] Button pressed %f seconds\n",(float)(millis()-encoderButton)/1000);
@@ -136,7 +136,7 @@ void Input_Loop(void * parameter) {
         encoderButton=0;
       }
     }else if(encoderValue!=0){
-      vTaskDelay(ENCODER_ROTATE_DELAY / portTICK_PERIOD_MS);
+      vTaskDelay(pdMS_TO_TICKS(ENCODER_ROTATE_DELAY));
       Rotate(); // encoderValue is global..
       DBG dbgLog(LOG_DEBUG,"[INPUT] Encoder rotated %d\n",encoderValue);
       encoderValue=0;
@@ -150,7 +150,7 @@ void Input_Loop(void * parameter) {
         LCD_display_mainv2();
       }
       // Idle: sleep so we do not busy-spin beside PID on core 0
-      vTaskDelay(20 / portTICK_PERIOD_MS);
+      vTaskDelay(pdMS_TO_TICKS(20));
     }
   }
 }

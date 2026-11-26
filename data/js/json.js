@@ -72,8 +72,11 @@ function executeQuery() {
         });
       }
     })
-    .catch(function () {
+    .catch(function (err) {
       /* keep last values; retry on next poll */
+      if (typeof console !== "undefined" && console.warn) {
+        console.warn("[PIDKiln status]", err && err.message ? err.message : err);
+      }
     })
     .then(function () {
       pollTimer = setTimeout(executeQuery, POLL_MS);

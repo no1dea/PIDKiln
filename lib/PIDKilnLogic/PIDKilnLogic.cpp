@@ -8,19 +8,26 @@ const char PIDKILN_ALLOWED_FILENAME_CHARS[] =
     "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890._";
 
 int PIDKiln_check_valid_chars(unsigned char a) {
-  if (a == 0 || a == 9 || a == 95) return 1; // EOF, tab, _
-  if (a == 10 || a == 13) return 1;          // LF, CR
-  if (a == '{' || a == '}' || a == '[' || a == ']' || a == '\\') return 1;
-  if (a >= 32 && a <= 90) return 1;
-  if (a >= 97 && a <= 122) return 1;
+  if (a == 0 || a == 9 || a == 95)
+    return 1; // EOF, tab, _
+  if (a == 10 || a == 13)
+    return 1; // LF, CR
+  if (a == '{' || a == '}' || a == '[' || a == ']' || a == '\\')
+    return 1;
+  if (a >= 32 && a <= 90)
+    return 1;
+  if (a >= 97 && a <= 122)
+    return 1;
   return 0;
 }
 
 int PIDKiln_valid_filename(const char *file) {
-  if (!file || !*file) return 0;
+  if (!file || !*file)
+    return 0;
   char c;
   while ((c = *file++)) {
-    if (strchr(PIDKILN_ALLOWED_FILENAME_CHARS, c)) continue;
+    if (strchr(PIDKILN_ALLOWED_FILENAME_CHARS, c))
+      continue;
     return 0;
   }
   return 1;
@@ -182,10 +189,45 @@ int PIDKiln_parse_program_json(const char *json, size_t len, uint16_t max_temp,
 }
 
 int PIDKiln_inline_comment_pos(const char *line) {
-  if (!line) return -1;
+  if (!line)
+    return -1;
   const char *p = strchr(line, '#');
-  if (!p) return -1;
+  if (!p)
+    return -1;
   return (int)(p - line);
+}
+
+static void pk_trim_copy(const char *start, const char *end, char *out, size_t cap) {
+  if (!out || cap == 0)
+    return;
+  while (start < end && (*start == ' ' || *start == '\t' || *start == '\r'))
+    start++;
+  while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\r'))
+    end--;
+  size_t n = (size_t)(end - start);
+  if (n >= cap)
+    n = cap - 1;
+  if (n)
+    memcpy(out, start, n);
+  out[n] = '\0';
+}
+
+int PIDKiln_prefs_split_kv(const char *line, char *key_out, size_t key_cap, char *val_out,
+                           size_t val_cap) {
+  if (key_out && key_cap)
+    key_out[0] = '\0';
+  if (val_out && val_cap)
+    val_out[0] = '\0';
+  if (!line)
+    return 0;
+  const char *eq = strchr(line, '=');
+  if (!eq || eq == line)
+    return 0;
+  pk_trim_copy(line, eq, key_out, key_cap);
+  pk_trim_copy(eq + 1, eq + 1 + strlen(eq + 1), val_out, val_cap);
+  if (!key_out || !key_out[0])
+    return 0;
+  return 1;
 }
 
 int PIDKiln_can_add_program_step(unsigned size, unsigned max_steps) {

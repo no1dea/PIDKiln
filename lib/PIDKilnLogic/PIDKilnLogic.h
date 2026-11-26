@@ -65,6 +65,14 @@ int PIDKiln_parse_program_json(const char *json, size_t len, uint16_t max_temp,
 /* Index of first '#' for inline comments, or -1 if none. Used by prefs loader. */
 int PIDKiln_inline_comment_pos(const char *line);
 
+/*
+ * Split "key = value" (or "key=value") into trimmed key/value.
+ * Returns 1 on success, 0 if no '=' or empty key after trim.
+ * Buffers are always NUL-terminated when cap > 0.
+ */
+int PIDKiln_prefs_split_kv(const char *line, char *key_out, size_t key_cap, char *val_out,
+                           size_t val_cap);
+
 /* 1 if another program step may be stored, 0 if at capacity. */
 int PIDKiln_can_add_program_step(unsigned size, unsigned max_steps);
 
